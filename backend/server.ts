@@ -4,6 +4,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import ffmpeg from "fluent-ffmpeg";
+import sharp from "sharp";
 import { S3Client } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
 import dotenv from "dotenv";
@@ -11,7 +12,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
@@ -19,8 +20,10 @@ app.use(express.json());
 // Ensure uploads directory exists
 const uploadDir = "uploads";
 const thumbsDir = path.join(uploadDir, "thumbs");
+const processedThumbsDir = path.join(uploadDir, "processed_thumbs");
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
 if (!fs.existsSync(thumbsDir)) fs.mkdirSync(thumbsDir);
+if (!fs.existsSync(processedThumbsDir)) fs.mkdirSync(processedThumbsDir);
 
 const upload = multer({ dest: uploadDir });
 
@@ -54,7 +57,7 @@ app.post("/upload", upload.single("video"), async (req, res) => {
 
   try {
     console.log(`[Processing] Starting conversion for ${originalname}...`);
-    // 1. Convert to MP4
+    // 1. Convert to MP4 using FFmpeg
     await new Promise((resolve, reject) => {
       ffmpeg(tempPath)
         .outputOptions("-c:v libx264", "-crf 23", "-preset fast", "-c:a aac", "-b:a 128k")
@@ -70,27 +73,47 @@ app.post("/upload", upload.single("video"), async (req, res) => {
         .run();
     });
 
-    console.log("[Processing] Generating thumbnails...");
-    // 2. Generate 5 thumbnails
+    console.log("[Processing] Generating raw thumbnails...");
+    // 2. Generate 5 raw thumbnails with FFmpeg
     await new Promise((resolve, reject) => {
       ffmpeg(outputPath)
         .screenshots({
           count: 5,
           folder: thumbsDir,
-          filename: `thumb-${timestamp}-%i.jpg`,
-          size: "320x180",
+          filename: `raw-thumb-${timestamp}-%i.jpg`,
+          size: "640x360",
         })
         .on("end", () => {
-          console.log("[Processing] Thumbnails generated.");
+          console.log("[Processing] Raw thumbnails extracted.");
           resolve(true);
         })
         .on("error", (err) => {
-          console.error("[Processing] Thumbnail error:", err);
+          console.error("[Processing] Thumbnail extraction error:", err);
           reject(err);
         });
     });
 
-    // 3. Upload to R2
+    // 3. Process thumbnails with Sharp
+    console.log("[Processing] Optimizing thumbnails with Sharp...");
+    const processedThumbPaths = [];
+    for (let i = 1; i <= 5; i++) {
+      const rawName = `raw-thumb-${timestamp}-${i}.jpg`;
+      const rawPath = path.join(thumbsDir, rawName);
+      const processedName = `thumb-${timestamp}-${i}.webp`;
+      const processedPath = path.join(processedThumbsDir, processedName);
+
+      if (fs.existsSync(rawPath)) {
+        await sharp(rawPath)
+          .resize(480, 270)
+          .webp({ quality: 80 })
+          .toFile(processedPath);
+        
+        processedThumbPaths.push({ path: processedPath, name: processedName });
+        fs.unlinkSync(rawPath); // Cleanup raw
+      }
+    }
+
+    // 4. Upload to R2
     const uploadFileToR2 = async (filePath: string, key: string, contentType: string) => {
       const fileStream = fs.createReadStream(filePath);
       const parallelUploads3 = new Upload({
@@ -105,7 +128,7 @@ app.post("/upload", upload.single("video"), async (req, res) => {
       return parallelUploads3.done();
     };
 
-    // Get metadata before cleanup
+    // Get metadata
     const stats = fs.statSync(outputPath);
     const fileSize = (stats.size / (1024 * 1024)).toFixed(2) + " MB";
     
@@ -126,20 +149,15 @@ app.post("/upload", upload.single("video"), async (req, res) => {
     const thumbnails = [];
     const publicUrlBase = process.env.CLOUDFLARE_R2_PUBLIC_URL || "";
 
-    console.log("[R2] Uploading thumbnails...");
-    for (let i = 1; i <= 5; i++) {
-      const thumbName = `thumb-${timestamp}-${i}.jpg`;
-      const thumbPath = path.join(thumbsDir, thumbName);
-      
-      if (fs.existsSync(thumbPath)) {
-        const thumbKey = `thumbnails/${thumbName}`;
-        await uploadFileToR2(thumbPath, thumbKey, "image/jpeg");
-        thumbnails.push(`${publicUrlBase}/${thumbKey}`);
-        fs.unlinkSync(thumbPath); // Cleanup
-      }
+    console.log("[R2] Uploading optimized thumbnails...");
+    for (const thumb of processedThumbPaths) {
+      const thumbKey = `thumbnails/${thumb.name}`;
+      await uploadFileToR2(thumb.path, thumbKey, "image/webp");
+      thumbnails.push(`${publicUrlBase}/${thumbKey}`);
+      fs.unlinkSync(thumb.path); // Cleanup processed
     }
 
-    // Cleanup local files
+    // Final Cleanup
     if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
     if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
 
