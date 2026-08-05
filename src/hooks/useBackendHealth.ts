@@ -1,30 +1,59 @@
 import { useState, useEffect } from "react";
 
-export const KOYEB_SERVER_URL = 
-  (import.meta as any).env?.VITE_KOYEB_PROCESSING_SERVER_URL || "https://your-koyeb-app.koyeb.app";
+const rawUrl = (import.meta as any).env?.VITE_KOYEB_PROCESSING_SERVER_URL;
+export const KOYEB_SERVER_URL = rawUrl ? rawUrl.replace(/\/$/, "") : "";
 
 export function useBackendHealth() {
   const [isOnline, setIsOnline] = useState<boolean>(false);
   const [isChecking, setIsChecking] = useState<boolean>(true);
 
   const checkHealth = async () => {
+    if (!KOYEB_SERVER_URL) {
+      console.error("[BackendHealth] VITE_KOYEB_PROCESSING_SERVER_URL is not defined in environment variables.");
+      setIsOnline(false);
+      setIsChecking(false);
+      return;
+    }
+
+    const healthUrl = `${KOYEB_SERVER_URL}/health`;
+    console.log(`[BackendHealth] Requesting: ${healthUrl}`);
+
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-      const res = await fetch(`${KOYEB_SERVER_URL}/health`, {
+      const response = await fetch(healthUrl, {
         method: "GET",
         signal: controller.signal,
-      }).catch(() => null);
+        mode: 'cors',
+        headers: {
+          'Accept': 'application/json',
+        }
+      });
 
       clearTimeout(timeoutId);
 
-      if (res && res.ok) {
+      console.log(`[BackendHealth] HTTP Status Code: ${response.status}`);
+      
+      const body = await response.json().catch((e) => {
+        console.error("[BackendHealth] Failed to parse JSON body:", e);
+        return null;
+      });
+      
+      console.log("[BackendHealth] Response Body:", body);
+
+      if (response.status === 200 && body && body.status === "online") {
         setIsOnline(true);
       } else {
+        console.warn(`[BackendHealth] SYSTEM OFFLINE - Unexpected response. Status: ${response.status}, Body:`, body);
         setIsOnline(false);
       }
-    } catch {
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        console.error(`[BackendHealth] Request timed out after 10s: ${healthUrl}`);
+      } else {
+        console.error(`[BackendHealth] Network error / CORS failure:`, err.message || err);
+      }
       setIsOnline(false);
     } finally {
       setIsChecking(false);
@@ -33,7 +62,7 @@ export function useBackendHealth() {
 
   useEffect(() => {
     checkHealth();
-    const interval = setInterval(checkHealth, 20000);
+    const interval = setInterval(checkHealth, 30000); // Retry every 30 seconds
     return () => clearInterval(interval);
   }, []);
 
