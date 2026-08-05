@@ -11,15 +11,13 @@ import {
   YAxis, 
   CartesianGrid, 
   Tooltip, 
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  Cell
+  ResponsiveContainer
 } from "recharts";
 
 export function Overview() {
   const [files, setFiles] = useState<Video[]>([]);
   const [visitors, setVisitors] = useState<Visitor[]>([]);
+  const [currentDate, setCurrentDate] = useState<Date>(new Date());
 
   useEffect(() => {
     // Load directly from D1 store
@@ -48,41 +46,80 @@ export function Overview() {
   const totalViews = files.reduce((acc, f) => acc + (f.views || 0), 0);
   const totalVisitorsCount = visitors.length;
 
-  // Real chart data calculated from D1 videos
-  const monthlyViewsData = [
-    { month: "Jan", views: Math.round(totalViews * 0.1) },
-    { month: "Feb", views: Math.round(totalViews * 0.15) },
-    { month: "Mar", views: Math.round(totalViews * 0.2) },
-    { month: "Apr", views: Math.round(totalViews * 0.25) },
-    { month: "May", views: Math.round(totalViews * 0.1) },
-    { month: "Jun", views: Math.round(totalViews * 0.2) },
+  // Navigation for Monthly Views Analytics
+  const handlePrevMonth = () => {
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+  };
+
+  const handleNextMonth = () => {
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+  };
+
+  const currentYear = currentDate.getFullYear();
+  const currentMonth = currentDate.getMonth();
+  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+  const monthName = currentDate.toLocaleString("default", { month: "long" });
+
+  // Generate complete days (1 to daysInMonth) for selected month
+  const monthlyViewsData = Array.from({ length: daysInMonth }, (_, i) => {
+    const dayNum = i + 1;
+    // Calculate real visitor views for this date
+    const dayViews = visitors.filter((v) => {
+      if (!v.visitedAt) return false;
+      const vDate = new Date(v.visitedAt);
+      return (
+        vDate.getFullYear() === currentYear &&
+        vDate.getMonth() === currentMonth &&
+        vDate.getDate() === dayNum
+      );
+    }).length;
+
+    return {
+      day: `${dayNum}`,
+      views: dayViews,
+    };
+  });
+
+  // Device categories and distribution calculation
+  const deviceCategories = [
+    { key: "Desktop", label: "Desktop", icon: Icons.Monitor, color: "bg-emerald-500 text-emerald-500" },
+    { key: "Mobile", label: "Mobile", icon: Icons.Smartphone, color: "bg-indigo-500 text-indigo-500" },
+    { key: "Tablet", label: "Tablet", icon: Icons.Tablet, color: "bg-amber-500 text-amber-500" },
+    { key: "Smart TV", label: "Smart TV", icon: Icons.Tv, color: "bg-sky-500 text-sky-500" },
+    { key: "Other", label: "Other", icon: Icons.HelpCircle, color: "bg-rose-500 text-rose-500" },
   ];
 
-  // Device distribution from real visitors
-  const deviceCounts: Record<string, number> = {};
+  const counts: Record<string, number> = { Desktop: 0, Mobile: 0, Tablet: 0, "Smart TV": 0, Other: 0 };
   visitors.forEach((v) => {
-    deviceCounts[v.os] = (deviceCounts[v.os] || 0) + 1;
+    const osLower = (v.os || "").toLowerCase();
+    const uaLower = (v.browser || "").toLowerCase();
+    if (osLower.includes("windows") || osLower.includes("mac") || osLower.includes("linux")) {
+      counts.Desktop++;
+    } else if (osLower.includes("android") || osLower.includes("ios") || osLower.includes("iphone")) {
+      counts.Mobile++;
+    } else if (osLower.includes("ipad") || osLower.includes("tablet")) {
+      counts.Tablet++;
+    } else if (osLower.includes("tv") || uaLower.includes("smarttv") || uaLower.includes("tizen")) {
+      counts["Smart TV"]++;
+    } else {
+      counts.Other++;
+    }
   });
-  const totalOSVisits = visitors.length || 1;
-  const deviceData = Object.keys(deviceCounts).length > 0
-    ? Object.entries(deviceCounts).map(([name, count]) => ({
-        name,
-        value: Math.round((count / totalOSVisits) * 100),
-        color: "oklch(0.627 0.194 149.214)",
-      }))
-    : [
-        { name: "Desktop", value: 70, color: "oklch(0.627 0.194 149.214)" },
-        { name: "Mobile", value: 30, color: "oklch(0.627 0.194 149.214 / 60%)" },
-      ];
+
+  const deviceData = deviceCategories.map((cat) => ({
+    ...cat,
+    percentage: totalVisitorsCount > 0 ? Math.round((counts[cat.key] / totalVisitorsCount) * 100) : 0,
+    count: counts[cat.key],
+  }));
 
   return (
     <div className="space-y-8 pb-12">
       {/* Welcome Banner */}
       <div className="relative overflow-hidden rounded-2xl bg-slate-900 p-8 text-white shadow-lg dark:bg-slate-800">
         <div className="relative z-10 space-y-2">
-          <h2 className="text-2xl font-black md:text-3xl">Good morning, Admin! 👋</h2>
+          <h2 className="text-2xl font-black md:text-3xl">Good Morning, Admin! 👋</h2>
           <p className="text-slate-300 max-w-md text-sm md:text-base">
-            All media metrics and analytics are loaded live from Cloudflare D1 database.
+            All media metrics and analytics are synchronized live from Cloudflare D1 database.
           </p>
         </div>
         <div className="absolute right-0 top-0 h-full w-1/3 bg-gradient-to-l from-emerald-500/20 to-transparent" />
@@ -91,21 +128,21 @@ export function Overview() {
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {[
-          { label: "Total Files", value: totalFiles.toString(), icon: Icons.FileStack },
+          { label: "Total Files", value: totalFiles.toString(), icon: Icons.FolderOpen },
           { label: "Total Views", value: totalViews > 1000 ? `${(totalViews / 1000).toFixed(1)}K` : totalViews.toString(), icon: Icons.Eye },
           { label: "Visitors", value: totalVisitorsCount.toString(), icon: Icons.Users },
-          { label: "Database", value: "D1 Connected", icon: Icons.ShieldCheck },
+          { label: "Database Status", value: "D1 Connected", icon: Icons.ShieldCheck },
         ].map((stat, i) => (
           <Card key={i} className="border bg-card shadow-sm hover:shadow-md transition-shadow">
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-4">
-                <div className="p-2.5 rounded-lg bg-emerald-500/10 text-emerald-500">
+                <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-500">
                   <stat.icon className="h-5 w-5" />
                 </div>
               </div>
               <div className="space-y-1">
-                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground/60">{stat.label}</p>
-                <h3 className="text-2xl font-black text-foreground/90">{stat.value}</h3>
+                <p className="text-xs font-bold text-muted-foreground">{stat.label}</p>
+                <h3 className="text-2xl font-black text-foreground">{stat.value}</h3>
               </div>
             </CardContent>
           </Card>
@@ -113,15 +150,30 @@ export function Overview() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Chart */}
+        {/* Monthly Views Analytics Chart */}
         <Card className="lg:col-span-2 border bg-card shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between border-b bg-muted/30 py-4">
-            <CardTitle className="text-sm font-black uppercase tracking-wider text-muted-foreground">Monthly Views Analytics</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between border-b bg-muted/20 py-4 px-6">
+            <CardTitle className="text-sm font-bold text-foreground">
+              Monthly Views Analytics ({monthName} {currentYear})
+            </CardTitle>
             <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 text-xs font-bold">
-                <div className="h-2 w-2 rounded-full bg-emerald-500" />
-                Views
-              </div>
+              <button
+                onClick={handlePrevMonth}
+                className="p-1.5 rounded-lg border border-border hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+                title="Previous Month"
+              >
+                <Icons.ChevronLeft className="h-4 w-4" />
+              </button>
+              <span className="text-xs font-bold min-w-[100px] text-center text-foreground">
+                {monthName} {currentYear}
+              </span>
+              <button
+                onClick={handleNextMonth}
+                className="p-1.5 rounded-lg border border-border hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+                title="Next Month"
+              >
+                <Icons.ChevronRight className="h-4 w-4" />
+              </button>
             </div>
           </CardHeader>
           <CardContent className="p-6">
@@ -130,31 +182,34 @@ export function Overview() {
                 <AreaChart data={monthlyViewsData}>
                   <defs>
                     <linearGradient id="colorViews" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="oklch(0.627 0.194 149.214)" stopOpacity={0.1}/>
+                      <stop offset="5%" stopColor="oklch(0.627 0.194 149.214)" stopOpacity={0.2}/>
                       <stop offset="95%" stopColor="oklch(0.627 0.194 149.214)" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="oklch(var(--border) / 50%)" />
                   <XAxis 
-                    dataKey="month" 
+                    dataKey="day" 
                     axisLine={false} 
                     tickLine={false} 
-                    tick={{ fontSize: 10, fontWeight: 700, fill: "oklch(var(--muted-foreground))" }}
+                    tick={{ fontSize: 11, fontWeight: 600, fill: "oklch(var(--muted-foreground))" }}
                     dy={10}
                   />
                   <YAxis 
                     axisLine={false} 
                     tickLine={false} 
-                    tick={{ fontSize: 10, fontWeight: 700, fill: "oklch(var(--muted-foreground))" }}
+                    tick={{ fontSize: 11, fontWeight: 600, fill: "oklch(var(--muted-foreground))" }}
+                    allowDecimals={false}
                   />
                   <Tooltip 
                     contentStyle={{ 
                       backgroundColor: "oklch(var(--card))", 
                       borderColor: "oklch(var(--border))",
-                      borderRadius: "8px",
+                      borderRadius: "12px",
                       fontSize: "12px",
                       boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)"
                     }}
+                    formatter={(value: number) => [`${value} Views`, "Views"]}
+                    labelFormatter={(label) => `Day ${label} of ${monthName}`}
                   />
                   <Area 
                     type="monotone" 
@@ -171,45 +226,34 @@ export function Overview() {
         </Card>
 
         {/* Device Distribution */}
-        <Card className="border bg-card shadow-sm">
-          <CardHeader className="border-b bg-muted/30 py-4">
-            <CardTitle className="text-sm font-black uppercase tracking-wider text-muted-foreground">Device Distribution</CardTitle>
+        <Card className="border bg-card shadow-sm flex flex-col justify-between">
+          <CardHeader className="border-b bg-muted/20 py-4 px-6">
+            <CardTitle className="text-sm font-bold text-foreground">Device Distribution</CardTitle>
           </CardHeader>
-          <CardContent className="p-6">
-            <div className="h-[200px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={deviceData} layout="vertical" margin={{ left: 0, right: 30 }}>
-                  <XAxis type="number" hide />
-                  <YAxis 
-                    dataKey="name" 
-                    type="category" 
-                    axisLine={false} 
-                    tickLine={false}
-                    tick={{ fontSize: 12, fontWeight: 700, fill: "oklch(var(--foreground))" }}
-                  />
-                  <Tooltip 
-                    cursor={{ fill: 'transparent' }}
-                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                  />
-                  <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={20}>
-                    {deviceData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="space-y-4 mt-2">
-              {deviceData.map((device, i) => (
-                <div key={i} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="h-2 w-2 rounded-full" style={{ backgroundColor: device.color }} />
-                    <span className="text-xs font-bold text-muted-foreground">{device.name}</span>
+          <CardContent className="p-6 space-y-5">
+            {deviceData.map((device) => (
+              <div key={device.key} className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-xl bg-muted/50 ${device.color.split(" ")[1]}`}>
+                      <device.icon className="h-4 w-4" />
+                    </div>
+                    <span className="text-xs font-bold text-foreground">{device.label}</span>
                   </div>
-                  <span className="text-xs font-black">{device.value}%</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-muted-foreground">({device.count})</span>
+                    <span className="text-xs font-black text-foreground">{device.percentage}%</span>
+                  </div>
                 </div>
-              ))}
-            </div>
+                {/* Progress Bar */}
+                <div className="h-2 w-full rounded-full bg-muted/40 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${device.color.split(" ")[0]}`}
+                    style={{ width: `${device.percentage}%` }}
+                  />
+                </div>
+              </div>
+            ))}
           </CardContent>
         </Card>
       </div>
@@ -217,19 +261,19 @@ export function Overview() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Visitors Table */}
         <Card className="border bg-card shadow-sm overflow-hidden">
-          <CardHeader className="border-b bg-muted/30 py-4 px-6 flex flex-row items-center justify-between">
-            <CardTitle className="text-sm font-black uppercase tracking-wider text-muted-foreground">Recent D1 Traffic</CardTitle>
+          <CardHeader className="border-b bg-muted/20 py-4 px-6 flex flex-row items-center justify-between">
+            <CardTitle className="text-sm font-bold text-foreground">Recent Traffic Logs</CardTitle>
             <Link to="/admin_dashboard/visitors" className="text-xs font-bold text-emerald-500 hover:underline">View All</Link>
           </CardHeader>
           <CardContent className="p-0">
             {visitors.length === 0 ? (
-              <div className="p-8 text-center text-xs text-muted-foreground font-bold">
-                No visitor traffic logged in D1 yet.
+              <div className="p-8 text-center text-xs text-muted-foreground font-medium">
+                No visitor traffic logged in D1 database yet.
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left">
-                  <thead className="bg-muted/10 text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">
+                  <thead className="bg-muted/10 text-xs font-bold text-muted-foreground">
                     <tr>
                       <th className="px-6 py-4">Visitor</th>
                       <th className="px-6 py-4">Location</th>
@@ -241,22 +285,20 @@ export function Overview() {
                       <tr key={visitor.id} className="hover:bg-muted/20 transition-colors">
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-3">
-                            <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center font-bold text-[10px] text-muted-foreground">
-                              {visitor.country.slice(0, 2).toUpperCase()}
+                            <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center font-bold text-xs text-muted-foreground">
+                              {visitor.country ? visitor.country.slice(0, 2).toUpperCase() : "??"}
                             </div>
                             <div className="flex flex-col">
-                              <span className="font-bold text-xs">{visitor.ip}</span>
-                              <span className="text-[10px] text-muted-foreground">{visitor.browser}</span>
+                              <span className="font-bold text-xs text-foreground">{visitor.ip}</span>
+                              <span className="text-xs text-muted-foreground">{visitor.browser}</span>
                             </div>
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          <span className="text-xs font-medium">{visitor.country}</span>
+                          <span className="text-xs font-medium text-foreground">{visitor.country || "Unknown"}</span>
                         </td>
                         <td className="px-6 py-4">
-                          <div className="flex items-center gap-2">
-                             <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 text-[10px] font-bold">D1 Logged</span>
-                          </div>
+                          <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-500 text-xs font-bold">D1 Logged</span>
                         </td>
                       </tr>
                     ))}
@@ -269,14 +311,14 @@ export function Overview() {
 
         {/* Media Library Quick Peek */}
         <Card className="border bg-card shadow-sm">
-          <CardHeader className="border-b bg-muted/30 py-4 px-6 flex flex-row items-center justify-between">
-            <CardTitle className="text-sm font-black uppercase tracking-wider text-muted-foreground">D1 Media Items</CardTitle>
+          <CardHeader className="border-b bg-muted/20 py-4 px-6 flex flex-row items-center justify-between">
+            <CardTitle className="text-sm font-bold text-foreground">Media Files Library</CardTitle>
             <Link to="/admin_dashboard/files" className="text-xs font-bold text-emerald-500 hover:underline">Manage Files</Link>
           </CardHeader>
           <CardContent className="p-6">
             {files.length === 0 ? (
-              <div className="text-center py-8 text-xs text-muted-foreground font-bold">
-                No videos stored in D1. Upload your first video from the Media Library!
+              <div className="text-center py-8 text-xs text-muted-foreground font-medium">
+                No videos stored in D1 database. Upload your first video from the Media Library!
               </div>
             ) : (
               <div className="space-y-4">
@@ -285,11 +327,11 @@ export function Overview() {
                     <div className="flex items-center gap-3">
                       <img src={file.thumbnailUrl} alt="" className="h-10 w-16 rounded-lg object-cover" />
                       <div className="space-y-0.5 max-w-xs">
-                        <h4 className="text-xs font-black truncate">{file.title}</h4>
-                        <p className="text-[10px] text-muted-foreground font-mono">/ad/{file.slug}</p>
+                        <h4 className="text-xs font-bold text-foreground truncate">{file.title}</h4>
+                        <p className="text-xs text-muted-foreground font-mono">/ad/{file.slug}</p>
                       </div>
                     </div>
-                    <span className="text-xs font-black text-emerald-500">{file.views} views</span>
+                    <span className="text-xs font-bold text-emerald-500">{file.views} views</span>
                   </div>
                 ))}
               </div>

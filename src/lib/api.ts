@@ -131,13 +131,21 @@ export function recordVisitor(slug: string = ""): void {
 // Direct D1 Settings Persistence
 export function getStoredSettings(): TaskSettings {
   const data = localStorage.getItem(STORAGE_SETTINGS_KEY);
-  if (!data) {
-    return { task1Url: "", task2Url: "", downloadTaskUrl: "" };
-  }
+  const defaults: TaskSettings = {
+    task1Url: "",
+    task2Url: "",
+    downloadTaskUrl: "",
+    vpnDetectionEnabled: false,
+    adBlockDetectionEnabled: false,
+    linkExpirationMinutes: 30,
+  };
+
+  if (!data) return defaults;
   try {
-    return JSON.parse(data);
+    const parsed = JSON.parse(data);
+    return { ...defaults, ...parsed };
   } catch {
-    return { task1Url: "", task2Url: "", downloadTaskUrl: "" };
+    return defaults;
   }
 }
 

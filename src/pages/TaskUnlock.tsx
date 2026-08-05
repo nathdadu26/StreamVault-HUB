@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Icons } from "@/src/components/Icons";
 import { Card, CardContent } from "@/components/ui/card";
@@ -8,7 +8,7 @@ import { Separator } from "@/components/ui/separator";
 import { MOCK_TASKS } from "../data/mock";
 import { motion, AnimatePresence } from "motion/react";
 import { useTaskSettings } from "../hooks/useTaskSettings";
-import { getVideoBySlug, recordVisitor } from "../lib/api";
+import { getVideoBySlug, recordVisitor, getStoredVisitors } from "../lib/api";
 import { Video } from "../types";
 
 export function TaskUnlock() {
@@ -19,6 +19,80 @@ export function TaskUnlock() {
   const [completedTasks, setCompletedTasks] = useState<string[]>([]);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [timer, setTimer] = useState(0);
+  
+  // Security States
+  const [isBlocked, setIsBlocked] = useState<"vpn" | "adblock" | "expired" | null>(null);
+  const [isCheckingSecurity, setIsCheckingSecurity] = useState(true);
+
+  const checkSecurity = useCallback(async () => {
+    if (isLoading) return;
+    setIsCheckingSecurity(true);
+
+    // 1. Check Link Expiration
+    const visitors = getStoredVisitors();
+    const currentVisitor = visitors.find(v => v.slug === slug);
+    if (currentVisitor && settings.linkExpirationMinutes > 0) {
+      const visitedAt = new Date(currentVisitor.visitedAt).getTime();
+      const now = Date.now();
+      const diffMinutes = (now - visitedAt) / (1000 * 60);
+      if (diffMinutes > settings.linkExpirationMinutes) {
+        setIsBlocked("expired");
+        setIsCheckingSecurity(false);
+        return;
+      }
+    }
+
+    // 2. Check VPN/Proxy (if enabled)
+    if (settings.vpnDetectionEnabled) {
+      try {
+        const res = await fetch("https://ipapi.co/json/");
+        const data = await res.json();
+        // Basic heuristic: check for proxy/vpn if the API provides it or check common hosting providers
+        // Note: Free tier might not have 'proxy' field, so we use a simplified check for this demo
+        if (data.proxy || data.hosting || data.org?.toLowerCase().includes("vpn")) {
+          setIsBlocked("vpn");
+          setIsCheckingSecurity(false);
+          return;
+        }
+      } catch (e) {
+        console.error("VPN Check failed", e);
+      }
+    }
+
+    // 3. Check AdBlock (if enabled)
+    if (settings.adBlockDetectionEnabled) {
+      const adBlockEnabled = await new Promise<boolean>((resolve) => {
+        const testAd = document.createElement("div");
+        testAd.innerHTML = "&nbsp;";
+        testAd.className = "adsbox";
+        testAd.style.position = "absolute";
+        testAd.style.top = "-1000px";
+        document.body.appendChild(testAd);
+        window.setTimeout(() => {
+          if (testAd.offsetHeight === 0) {
+            resolve(true);
+          } else {
+            resolve(false);
+          }
+          document.body.removeChild(testAd);
+        }, 100);
+      });
+
+      if (adBlockEnabled) {
+        setIsBlocked("adblock");
+        setIsCheckingSecurity(false);
+        return;
+      }
+    }
+
+    setIsCheckingSecurity(false);
+  }, [isLoading, settings, slug]);
+
+  useEffect(() => {
+    if (!isLoading) {
+      checkSecurity();
+    }
+  }, [isLoading, checkSecurity]);
 
   useEffect(() => {
     if (slug) {
@@ -59,7 +133,57 @@ export function TaskUnlock() {
 
   const isAllCompleted = completedTasks.length === MOCK_TASKS.length;
 
-  if (isLoading) return null;
+  if (isLoading || isCheckingSecurity) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
+        <Icons.Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
+        <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Verifying Security...</p>
+      </div>
+    );
+  }
+
+  if (isBlocked) {
+    const messages = {
+      vpn: {
+        title: "VPN / Proxy Detected",
+        desc: "Please disable your VPN or Proxy server to access this content. We only allow direct connections for security reasons.",
+        icon: Icons.ShieldAlert,
+        color: "text-rose-500 bg-rose-500/10 border-rose-500/20"
+      },
+      adblock: {
+        title: "AdBlocker Detected",
+        desc: "We detected an active AdBlocker. Please disable it and refresh the page to support the platform and continue.",
+        icon: Icons.AlertCircle,
+        color: "text-amber-500 bg-amber-500/10 border-amber-500/20"
+      },
+      expired: {
+        title: "Link Expired",
+        desc: "This verification link has expired. Please go back to the source and generate a new link.",
+        icon: Icons.Clock,
+        color: "text-slate-500 bg-slate-500/10 border-slate-500/20"
+      }
+    };
+
+    const config = messages[isBlocked];
+
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[500px] max-w-md mx-auto text-center space-y-6 animate-in fade-in zoom-in duration-500">
+        <div className={`p-6 rounded-3xl border shadow-xl ${config.color}`}>
+          <config.icon className="h-12 w-12 mx-auto mb-4" />
+          <h2 className="text-2xl font-black mb-2">{config.title}</h2>
+          <p className="text-sm font-medium opacity-80 leading-relaxed">{config.desc}</p>
+        </div>
+        <Button 
+          variant="outline" 
+          onClick={() => window.location.reload()}
+          className="h-12 px-8 rounded-xl font-bold text-xs gap-2"
+        >
+          <Icons.RefreshCcw className="h-4 w-4" />
+          Try Again
+        </Button>
+      </div>
+    );
+  }
 
   const currentSlug = video ? video.slug : (slug || "sjhu4ld7_ndlksk_h");
 
@@ -86,7 +210,7 @@ export function TaskUnlock() {
       {/* Instructions Grid */}
       <div className="grid grid-cols-1 gap-4">
         {[
-          { num: 1, icon: Icons.Pointer, title: "Interact", desc: "Click a task and wait for the verification timer." },
+          { num: 1, icon: Icons.ListCheck, title: "Interact", desc: "Click a task and wait for the verification timer." },
           { num: 2, icon: Icons.Clock, title: "Verify", desc: "Stay on the destination page until the countdown ends." },
           { num: 3, icon: Icons.LockOpen, title: "Unlock", desc: "Once all tasks are green, access will be granted." },
         ].map((step, idx) => (
@@ -141,13 +265,13 @@ export function TaskUnlock() {
                   }`}>
                     {isCompleted ? (
                       <div className="relative flex items-center justify-center">
-                        <Icons.File className="h-6 w-6 text-white" />
+                        <Icons.ListCheck className="h-6 w-6 text-white" />
                         <div className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full bg-white text-emerald-600 flex items-center justify-center shadow-sm">
                           <Icons.Check className="h-2.5 w-2.5 stroke-[3px]" />
                         </div>
                       </div>
                     ) : (
-                      <Icons.File className="h-6 w-6 text-white" />
+                      <Icons.ListCheck className="h-6 w-6 text-white" />
                     )}
                   </div>
                   <div className="space-y-1">

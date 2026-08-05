@@ -17,7 +17,7 @@ export function TaskLinksManagement() {
   }, [settings]);
 
   const validateUrl = (url: string) => {
-    if (!url) return true; // Allow empty
+    if (!url) return true;
     try {
       new URL(url);
       return true;
@@ -48,11 +48,11 @@ export function TaskLinksManagement() {
 
   return (
     <Card className="border border-border/40 bg-card shadow-sm rounded-2xl">
-      <CardHeader className="border-b border-border/40 bg-muted/20">
+      <CardHeader className="border-b border-border/40 bg-muted/20 py-4 px-6">
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle className="text-xs font-black uppercase tracking-widest text-foreground/80">Task Links Management</CardTitle>
-            <CardDescription className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/40">Manage global redirect URLs for user tasks</CardDescription>
+            <CardTitle className="text-sm font-bold text-foreground">Task Links Management</CardTitle>
+            <CardDescription className="text-xs text-muted-foreground">Manage global redirect URLs for user tasks</CardDescription>
           </div>
           <AnimatePresence>
             {status.type && (
@@ -60,7 +60,7 @@ export function TaskLinksManagement() {
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 20 }}
-                className={`text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-lg border ${
+                className={`text-xs font-bold px-3 py-1 rounded-lg border ${
                   status.type === "success" 
                     ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" 
                     : "bg-rose-500/10 text-rose-500 border-rose-500/20"
@@ -72,37 +72,30 @@ export function TaskLinksManagement() {
           </AnimatePresence>
         </div>
       </CardHeader>
-      <CardContent className="p-8 space-y-8">
+      <CardContent className="p-6 space-y-6">
         {[
-          { id: "task1Url", label: "Task 1 URL", icon: Icons.Pointer, color: "bg-indigo-500" },
-          { id: "task2Url", label: "Task 2 URL", icon: Icons.Clock, color: "bg-slate-700" },
-          { id: "downloadTaskUrl", label: "Download Task URL", icon: Icons.Zap, color: "bg-amber-500" },
+          { id: "task1Url", label: "Task 1 URL", icon: Icons.ListCheck, color: "bg-indigo-500" },
+          { id: "task2Url", label: "Task 2 URL", icon: Icons.ListCheck, color: "bg-slate-700" },
+          { id: "downloadTaskUrl", label: "Download Task URL", icon: Icons.Download, color: "bg-amber-500" },
         ].map((field) => (
-          <div key={field.id} className="space-y-4">
+          <div key={field.id} className="space-y-3">
             <div className="flex items-center gap-3">
               <div className={`h-8 w-8 rounded-lg ${field.color} flex items-center justify-center text-white`}>
                 <field.icon className="h-4 w-4" />
               </div>
-              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{field.label}</Label>
+              <Label className="text-xs font-bold text-muted-foreground">{field.label}</Label>
             </div>
             <div className="flex gap-3">
               <Input
                 value={localSettings[field.id as keyof typeof localSettings]}
                 onChange={(e) => setLocalSettings({ ...localSettings, [field.id]: e.target.value })}
                 placeholder="https://..."
-                className="h-12 rounded-xl bg-muted/20 border-border/40 focus-visible:ring-emerald-500/20 flex-1 font-medium text-sm"
+                className="h-11 rounded-xl bg-muted/20 border-border/40 focus-visible:ring-emerald-500/20 flex-1 font-medium text-sm"
               />
               <div className="flex gap-2">
                 <Button 
-                  onClick={() => handleReset(field.id as keyof typeof localSettings)}
-                  variant="outline" 
-                  className="h-12 w-12 p-0 rounded-xl border-border/40 hover:bg-muted/50"
-                >
-                  <Icons.RefreshCcw className="h-4 w-4" />
-                </Button>
-                <Button 
                   onClick={() => handleSave(field.id as keyof typeof localSettings)}
-                  className="h-12 px-6 rounded-xl font-black text-xs uppercase tracking-widest bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/10"
+                  className="h-11 px-6 rounded-xl font-bold text-xs bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/10"
                 >
                   Save
                 </Button>

@@ -31,14 +31,14 @@ export function AdminHeader({ title, onMenuClick, isMobile }: {
       <div className="flex items-center gap-3">
         <div className="hidden sm:flex items-center gap-2">
           {isOnline ? (
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[10px] font-black uppercase tracking-wider">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-xs font-bold">
               <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              SYSTEM ONLINE
+              System Online
             </div>
           ) : (
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-500 text-[10px] font-black uppercase tracking-wider">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-500 text-xs font-bold">
               <div className="h-1.5 w-1.5 rounded-full bg-rose-500" />
-              SYSTEM OFFLINE
+              System Offline
             </div>
           )}
         </div>

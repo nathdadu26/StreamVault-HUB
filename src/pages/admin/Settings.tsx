@@ -1,3 +1,4 @@
+import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Icons } from "@/src/components/Icons";
 import { Button } from "@/components/ui/button";
@@ -6,70 +7,126 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { TaskLinksManagement } from "@/src/components/admin/TaskLinksManagement";
+import { useTaskSettings } from "../../hooks/useTaskSettings";
+import { motion, AnimatePresence } from "motion/react";
 
 export function Settings() {
+  const { settings, saveSettings, isLoading } = useTaskSettings();
+  const [localSettings, setLocalSettings] = useState(settings);
+  const [status, setStatus] = useState<{ type: "success" | "error" | null; message: string }>({ type: null, message: "" });
+
+  useEffect(() => {
+    setLocalSettings(settings);
+  }, [settings]);
+
+  const handleSaveAll = () => {
+    saveSettings(localSettings);
+    setStatus({ type: "success", message: "Settings updated successfully!" });
+    setTimeout(() => setStatus({ type: null, message: "" }), 3000);
+  };
+
+  const handleToggle = (key: keyof typeof localSettings) => {
+    setLocalSettings((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  };
+
+  if (isLoading) return null;
+
   return (
     <div className="max-w-4xl space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-bold text-foreground">Platform Settings</h2>
+        <AnimatePresence>
+          {status.type && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className={`text-xs font-bold px-4 py-2 rounded-xl border ${
+                status.type === "success" 
+                  ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" 
+                  : "bg-rose-500/10 text-rose-500 border-rose-500/20"
+              }`}
+            >
+              {status.message}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
       <div className="grid grid-cols-1 gap-8">
         {/* Task Links Management */}
         <TaskLinksManagement />
 
-        {/* General Settings */}
-        <Card className="border border-border/40 bg-card shadow-sm rounded-2xl">
-          <CardHeader className="border-b border-border/40 bg-muted/20">
-            <CardTitle className="text-xs font-black uppercase tracking-widest text-foreground/80">General Configuration</CardTitle>
-            <CardDescription className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/40">Basic system parameters and branding</CardDescription>
-          </CardHeader>
-          <CardContent className="p-8 space-y-6">
-            <div className="grid gap-6">
-              <div className="grid gap-2">
-                <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Platform Name</Label>
-                <Input defaultValue="StreamVault HUB" className="h-11 rounded-xl bg-muted/20 border-border/40 focus-visible:ring-emerald-500/20" />
-              </div>
-              <div className="grid gap-2">
-                <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Contact Email</Label>
-                <Input defaultValue="support@streamvault.hub" className="h-11 rounded-xl bg-muted/20 border-border/40 focus-visible:ring-emerald-500/20" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
         {/* Security Settings */}
         <Card className="border border-border/40 bg-card shadow-sm rounded-2xl">
-          <CardHeader className="border-b border-border/40 bg-muted/20">
-            <CardTitle className="text-xs font-black uppercase tracking-widest text-foreground/80">Security & Access</CardTitle>
-            <CardDescription className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/40">Protection and verification controls</CardDescription>
+          <CardHeader className="border-b border-border/40 bg-muted/20 py-4 px-6">
+            <CardTitle className="text-sm font-bold text-foreground">Security & Access</CardTitle>
+            <CardDescription className="text-xs text-muted-foreground">Protection and verification controls</CardDescription>
           </CardHeader>
-          <CardContent className="p-8 space-y-6">
-            <div className="space-y-4">
-              {[
-                { title: "VPN Protection", desc: "Block visitors using VPN or Proxies", enabled: true },
-                { title: "Link Expiration", desc: "Download links expire after 24 hours", enabled: true },
-                { title: "AdBlock Detection", desc: "Force users to disable AdBlock to continue", enabled: false },
-                { title: "Anti-Bot Verification", desc: "Enable CAPTCHA for sensitive actions", enabled: true },
-              ].map((item, idx) => (
-                <div key={idx}>
-                  <div className="flex items-center justify-between group">
-                    <div className="space-y-0.5">
-                      <h4 className="text-sm font-black text-foreground/80">{item.title}</h4>
-                      <p className="text-xs text-muted-foreground/60 font-medium">{item.desc}</p>
-                    </div>
-                    <Switch defaultChecked={item.enabled} className="data-[state=checked]:bg-emerald-500" />
-                  </div>
-                  {idx < 3 && <Separator className="my-4 bg-border/40" />}
+          <CardContent className="p-6 space-y-6">
+            <div className="space-y-6">
+              {/* VPN Detection */}
+              <div className="flex items-center justify-between group">
+                <div className="space-y-0.5">
+                  <h4 className="text-sm font-bold text-foreground">VPN Detection</h4>
+                  <p className="text-xs text-muted-foreground font-medium">Block visitors using VPN or Proxies</p>
                 </div>
-              ))}
+                <Switch 
+                  checked={localSettings.vpnDetectionEnabled} 
+                  onCheckedChange={() => handleToggle("vpnDetectionEnabled")}
+                  className="data-[state=checked]:bg-emerald-500" 
+                />
+              </div>
+
+              <Separator className="bg-border/40" />
+
+              {/* AdBlock Detection */}
+              <div className="flex items-center justify-between group">
+                <div className="space-y-0.5">
+                  <h4 className="text-sm font-bold text-foreground">AdBlocker Detection</h4>
+                  <p className="text-xs text-muted-foreground font-medium">Force users to disable AdBlock to continue</p>
+                </div>
+                <Switch 
+                  checked={localSettings.adBlockDetectionEnabled} 
+                  onCheckedChange={() => handleToggle("adBlockDetectionEnabled")}
+                  className="data-[state=checked]:bg-emerald-500" 
+                />
+              </div>
+
+              <Separator className="bg-border/40" />
+
+              {/* Link Expiration */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between group">
+                  <div className="space-y-0.5">
+                    <h4 className="text-sm font-bold text-foreground">Link Expiration</h4>
+                    <p className="text-xs text-muted-foreground font-medium">Time until task links become invalid</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Input 
+                      type="number"
+                      value={localSettings.linkExpirationMinutes}
+                      onChange={(e) => setLocalSettings(prev => ({ ...prev, linkExpirationMinutes: parseInt(e.target.value) || 0 }))}
+                      className="h-10 w-20 text-center font-bold text-xs rounded-xl bg-muted/20 border-border/40"
+                    />
+                    <span className="text-xs font-bold text-muted-foreground">Minutes</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>
 
         {/* Integration Settings */}
         <Card className="border border-border/40 bg-card shadow-sm rounded-2xl">
-          <CardHeader className="border-b border-border/40 bg-muted/20">
-            <CardTitle className="text-xs font-black uppercase tracking-widest text-foreground/80">External Integrations</CardTitle>
-            <CardDescription className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/40">Connect third-party services</CardDescription>
+          <CardHeader className="border-b border-border/40 bg-muted/20 py-4 px-6">
+            <CardTitle className="text-sm font-bold text-foreground">External Integrations</CardTitle>
+            <CardDescription className="text-xs text-muted-foreground">Connect third-party services</CardDescription>
           </CardHeader>
-          <CardContent className="p-8 space-y-6">
+          <CardContent className="p-6 space-y-6">
             <div className="grid gap-6">
                <div className="p-6 rounded-2xl bg-sky-500/5 border border-sky-500/10 flex items-center justify-between gap-6">
                   <div className="flex items-center gap-4">
@@ -77,19 +134,19 @@ export function Settings() {
                         <Icons.Telegram className="h-6 w-6" />
                      </div>
                      <div className="space-y-0.5">
-                        <h4 className="text-sm font-black text-sky-700">Telegram Bot API</h4>
-                        <p className="text-xs text-sky-600/60 font-medium">Auto-post updates to your channel</p>
+                        <h4 className="text-sm font-bold text-sky-700">Telegram Bot API</h4>
+                        <p className="text-xs text-sky-600/70 font-medium">Auto-post updates to your channel</p>
                      </div>
                   </div>
-                  <Button variant="outline" className="border-sky-500/20 text-sky-600 hover:bg-sky-500/10 h-10 rounded-xl px-6 font-black text-xs uppercase tracking-widest">Configure</Button>
+                  <Button variant="outline" className="border-sky-500/20 text-sky-600 hover:bg-sky-500/10 h-10 rounded-xl px-6 font-bold text-xs">Configure</Button>
                </div>
             </div>
           </CardContent>
         </Card>
 
         <div className="flex items-center justify-end gap-4 pt-4">
-           <Button variant="outline" className="h-12 px-8 rounded-xl font-black text-xs uppercase tracking-widest border-border/40">Cancel</Button>
-           <Button className="h-12 px-10 rounded-xl font-black text-xs uppercase tracking-widest bg-emerald-500 hover:bg-emerald-600 text-white shadow-xl shadow-emerald-500/20">Save Changes</Button>
+           <Button variant="outline" className="h-11 px-6 rounded-xl font-bold text-xs border-border/40" onClick={() => setLocalSettings(settings)}>Cancel</Button>
+           <Button className="h-11 px-8 rounded-xl font-bold text-xs bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/20" onClick={handleSaveAll}>Save Changes</Button>
         </div>
       </div>
     </div>

@@ -25,6 +25,9 @@ export interface TaskSettings {
   task1Url: string;
   task2Url: string;
   downloadTaskUrl: string;
+  vpnDetectionEnabled: boolean;
+  adBlockDetectionEnabled: boolean;
+  linkExpirationMinutes: number;
 }
 
 export interface Visitor {

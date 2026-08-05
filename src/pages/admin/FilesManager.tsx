@@ -153,18 +153,18 @@ export function FilesManager() {
         <CardHeader className="border-b border-border/40 bg-muted/20">
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-xs font-black uppercase tracking-widest text-foreground/80">Video Processing & Cloudflare Storage</CardTitle>
-              <CardDescription className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/40">
+              <CardTitle className="text-sm font-bold text-foreground">Video Processing & Cloudflare Storage</CardTitle>
+              <CardDescription className="text-xs text-muted-foreground">
                 Upload videos for automated MP4 conversion, thumbnail extraction & D1/R2 storage
               </CardDescription>
             </div>
             {isOnline ? (
-              <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-[9px] font-black uppercase tracking-widest">
-                Koyeb Server Ready
+              <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-xs font-bold">
+                Server Ready
               </Badge>
             ) : (
-              <Badge variant="destructive" className="text-[9px] font-black uppercase tracking-widest">
-                Koyeb Server Offline
+              <Badge variant="destructive" className="text-xs font-bold">
+                Server Offline
               </Badge>
             )}
           </div>
@@ -278,8 +278,8 @@ export function FilesManager() {
         <CardHeader className="border-b border-border/40 bg-muted/20">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
-              <CardTitle className="text-xs font-black uppercase tracking-widest text-foreground/80">All Files (Cloudflare D1)</CardTitle>
-              <CardDescription className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/40">
+              <CardTitle className="text-sm font-bold text-foreground">All Files (Cloudflare D1)</CardTitle>
+              <CardDescription className="text-xs text-muted-foreground">
                 {filteredFiles.length} file{filteredFiles.length !== 1 ? "s" : ""} registered in D1 database
               </CardDescription>
             </div>

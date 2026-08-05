@@ -27,8 +27,8 @@ export function VisitorsStats() {
   const browserCounts: Record<string, number> = {};
 
   visitors.forEach((v) => {
-    osCounts[v.os] = (osCounts[v.os] || 0) + 1;
-    browserCounts[v.browser] = (browserCounts[v.browser] || 0) + 1;
+    if (v.os) osCounts[v.os] = (osCounts[v.os] || 0) + 1;
+    if (v.browser) browserCounts[v.browser] = (browserCounts[v.browser] || 0) + 1;
   });
 
   const deviceRanking = Object.keys(osCounts).length > 0
@@ -38,10 +38,11 @@ export function VisitorsStats() {
         percentage: Math.round((count / total) * 100),
       }))
     : [
-        { name: "Windows", count: 0, percentage: 0 },
-        { name: "Android", count: 0, percentage: 0 },
-        { name: "iOS", count: 0, percentage: 0 },
-        { name: "macOS", count: 0, percentage: 0 },
+        { name: "Desktop", count: 0, percentage: 0 },
+        { name: "Mobile", count: 0, percentage: 0 },
+        { name: "Tablet", count: 0, percentage: 0 },
+        { name: "Smart TV", count: 0, percentage: 0 },
+        { name: "Other", count: 0, percentage: 0 },
       ];
 
   const browserRanking = Object.keys(browserCounts).length > 0
@@ -54,26 +55,27 @@ export function VisitorsStats() {
         { name: "Chrome", count: 0, percentage: 0 },
         { name: "Safari", count: 0, percentage: 0 },
         { name: "Firefox", count: 0, percentage: 0 },
+        { name: "Edge", count: 0, percentage: 0 },
       ];
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
       {/* Top Visitors Table */}
       <Card className="border border-border/40 bg-card shadow-sm overflow-hidden rounded-2xl">
-        <CardHeader className="border-b border-border/40 bg-muted/20">
-          <CardTitle className="text-sm font-black uppercase tracking-widest text-foreground/80">
-            Cloudflare D1 Visitor Activity ({visitors.length} Total Logs)
+        <CardHeader className="border-b border-border/40 bg-muted/20 py-4 px-6">
+          <CardTitle className="text-sm font-bold text-foreground">
+            Visitor Activity Logs ({visitors.length} Total Logs)
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           {visitors.length === 0 ? (
-            <div className="p-12 text-center text-xs text-muted-foreground font-bold">
-              No visitor traffic recorded in D1 yet. Access public links to register visitors.
+            <div className="p-12 text-center text-xs text-muted-foreground font-medium">
+              No visitor traffic recorded in D1 database yet. Access public links to register visitors.
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-xs text-left">
-                <thead className="bg-muted/30 text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">
+                <thead className="bg-muted/30 text-xs font-bold text-muted-foreground">
                   <tr>
                     <th className="px-6 py-4">Rank</th>
                     <th className="px-6 py-4">IP Address</th>
@@ -86,21 +88,20 @@ export function VisitorsStats() {
                   {visitors.slice(0, 10).map((visitor, idx) => (
                     <tr key={visitor.id} className="hover:bg-muted/20 transition-colors">
                       <td className="px-6 py-4">
-                        <span className={`h-6 w-6 flex items-center justify-center rounded-lg font-black text-[10px] ${idx < 3 ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20" : "bg-muted/50 text-muted-foreground/60"}`}>
+                        <span className={`h-6 w-6 flex items-center justify-center rounded-lg font-bold text-xs ${idx < 3 ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20" : "bg-muted/50 text-muted-foreground"}`}>
                           0{idx + 1}
                         </span>
                       </td>
                       <td className="px-6 py-4 font-mono text-emerald-500 font-bold">{visitor.ip}</td>
                       <td className="px-6 py-4">
                          <div className="flex items-center gap-2">
-                            <span className="font-black text-foreground/80">{visitor.totalLinksOpened}</span>
-                            <span className="text-[10px] text-muted-foreground/40 font-bold uppercase tracking-tighter">interactions</span>
+                            <span className="font-bold text-foreground">{visitor.totalLinksOpened}</span>
+                            <span className="text-xs text-muted-foreground">Interactions</span>
                          </div>
                       </td>
-                      <td className="px-6 py-4 text-muted-foreground/80">{visitor.os} • {visitor.browser}</td>
+                      <td className="px-6 py-4 text-muted-foreground">{visitor.os} • {visitor.browser}</td>
                       <td className="px-6 py-4 flex items-center gap-2">
-                         <div className="h-4 w-6 bg-muted/50 rounded-sm" />
-                         <span className="text-foreground/80">{visitor.country}</span>
+                         <span className="text-foreground">{visitor.country || "Unknown"}</span>
                       </td>
                     </tr>
                   ))}
@@ -114,19 +115,19 @@ export function VisitorsStats() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         {/* Devices Ranking */}
         <Card className="border border-border/40 bg-card shadow-sm rounded-2xl">
-          <CardHeader className="border-b border-border/40 bg-muted/20">
-            <CardTitle className="text-xs font-black uppercase tracking-widest text-foreground/80">Device Distribution</CardTitle>
+          <CardHeader className="border-b border-border/40 bg-muted/20 py-4 px-6">
+            <CardTitle className="text-sm font-bold text-foreground">Device Distribution</CardTitle>
           </CardHeader>
-          <CardContent className="p-8 space-y-6">
+          <CardContent className="p-6 space-y-6">
              {deviceRanking.map((item) => (
-               <div key={item.name} className="space-y-3">
-                 <div className="flex items-center justify-between text-[10px] font-black">
-                   <span className="uppercase tracking-[0.2em] text-muted-foreground/60">{item.name}</span>
+               <div key={item.name} className="space-y-2">
+                 <div className="flex items-center justify-between text-xs font-bold">
+                   <span className="text-muted-foreground">{item.name}</span>
                    <span className="text-emerald-500">{item.percentage}%</span>
                  </div>
                  <div className="h-2 w-full bg-muted/50 rounded-full overflow-hidden border border-border/40">
                     <div 
-                      className="h-full bg-emerald-500 rounded-full transition-all duration-1000 shadow-[0_0_8px_rgba(16,185,129,0.4)]" 
+                      className="h-full bg-emerald-500 rounded-full transition-all duration-1000" 
                       style={{ width: `${item.percentage}%` }}
                     />
                  </div>
@@ -137,19 +138,19 @@ export function VisitorsStats() {
 
         {/* Browser Ranking */}
         <Card className="border border-border/40 bg-card shadow-sm rounded-2xl">
-          <CardHeader className="border-b border-border/40 bg-muted/20">
-            <CardTitle className="text-xs font-black uppercase tracking-widest text-foreground/80">Browser Ranking</CardTitle>
+          <CardHeader className="border-b border-border/40 bg-muted/20 py-4 px-6">
+            <CardTitle className="text-sm font-bold text-foreground">Browser Ranking</CardTitle>
           </CardHeader>
-          <CardContent className="p-8 space-y-6">
+          <CardContent className="p-6 space-y-6">
              {browserRanking.map((item) => (
-               <div key={item.name} className="space-y-3">
-                 <div className="flex items-center justify-between text-[10px] font-black">
-                   <span className="uppercase tracking-[0.2em] text-muted-foreground/60">{item.name}</span>
-                   <span className="text-emerald-500">{item.count} sessions</span>
+               <div key={item.name} className="space-y-2">
+                 <div className="flex items-center justify-between text-xs font-bold">
+                   <span className="text-muted-foreground">{item.name}</span>
+                   <span className="text-emerald-500">{item.count} Sessions</span>
                  </div>
                  <div className="h-2 w-full bg-muted/50 rounded-full overflow-hidden border border-border/40">
                     <div 
-                      className="h-full bg-emerald-500 rounded-full transition-all duration-1000 shadow-[0_0_8px_rgba(16,185,129,0.4)]" 
+                      className="h-full bg-emerald-500 rounded-full transition-all duration-1000" 
                       style={{ width: `${item.percentage}%` }}
                     />
                  </div>

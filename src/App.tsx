@@ -21,8 +21,10 @@ export default function App() {
             <Layout>
               <Routes>
                 <Route path="/" element={<TaskUnlock />} />
+                <Route path="/ad/:slug" element={<TaskUnlock />} />
                 <Route path="/s/:slug" element={<VideoPlayer />} />
                 <Route path="/dl/:slug" element={<DownloadPage />} />
+                <Route path="/d/:slug" element={<DownloadPage />} />
               </Routes>
             </Layout>
           } />

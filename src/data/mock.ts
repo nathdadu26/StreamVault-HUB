@@ -33,6 +33,9 @@ export const DEFAULT_SETTINGS: TaskSettings = {
   task1Url: "https://example.com/task1",
   task2Url: "https://example.com/task2",
   downloadTaskUrl: "https://example.com/download-task",
+  vpnDetectionEnabled: false,
+  adBlockDetectionEnabled: false,
+  linkExpirationMinutes: 30,
 };
 
 export const MOCK_VISITORS: Visitor[] = [
