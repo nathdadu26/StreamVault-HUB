@@ -138,6 +138,9 @@ export function getStoredSettings(): TaskSettings {
     vpnDetectionEnabled: false,
     adBlockDetectionEnabled: false,
     linkExpirationMinutes: 30,
+    telegramBotToken: "",
+    telegramPostInterval: 30,
+    telegramPostUnit: "minutes",
   };
 
   if (!data) return defaults;

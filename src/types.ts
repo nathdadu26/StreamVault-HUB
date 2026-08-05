@@ -28,6 +28,9 @@ export interface TaskSettings {
   vpnDetectionEnabled: boolean;
   adBlockDetectionEnabled: boolean;
   linkExpirationMinutes: number;
+  telegramBotToken: string;
+  telegramPostInterval: number;
+  telegramPostUnit: "minutes" | "hours";
 }
 
 export interface Visitor {

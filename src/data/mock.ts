@@ -36,6 +36,9 @@ export const DEFAULT_SETTINGS: TaskSettings = {
   vpnDetectionEnabled: false,
   adBlockDetectionEnabled: false,
   linkExpirationMinutes: 30,
+  telegramBotToken: "",
+  telegramPostInterval: 30,
+  telegramPostUnit: "minutes",
 };
 
 export const MOCK_VISITORS: Visitor[] = [

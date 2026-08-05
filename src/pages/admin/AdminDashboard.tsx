@@ -8,7 +8,7 @@ import { useState, useEffect } from "react";
 import { Icons } from "@/src/components/Icons";
 import { Overview } from "./Overview";
 import { FilesManager } from "./FilesManager";
-import { VisitorsStats } from "./VisitorsStats";
+import { Bots } from "./Bots";
 import { Settings } from "./Settings";
 import { AdminSidebar } from "@/src/components/admin/AdminSidebar";
 import { AdminHeader } from "@/src/components/admin/AdminHeader";
@@ -44,7 +44,7 @@ export function AdminDashboard() {
   const getPageTitle = () => {
     if (location.pathname === "/admin_dashboard") return "Dashboard Overview";
     if (location.pathname === "/admin_dashboard/files") return "Media Library";
-    if (location.pathname === "/admin_dashboard/visitors") return "Traffic Analytics";
+    if (location.pathname === "/admin_dashboard/bots") return "Bot Management";
     if (location.pathname === "/admin_dashboard/settings") return "System Settings";
     return "Admin Panel";
   };
@@ -70,7 +70,7 @@ export function AdminDashboard() {
             <Routes>
               <Route path="/" element={<Overview />} />
               <Route path="/files" element={<FilesManager />} />
-              <Route path="/visitors" element={<VisitorsStats />} />
+              <Route path="/bots" element={<Bots />} />
               <Route path="/settings" element={<Settings />} />
             </Routes>
           </div>

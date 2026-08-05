@@ -120,30 +120,6 @@ export function Settings() {
           </CardContent>
         </Card>
 
-        {/* Integration Settings */}
-        <Card className="border border-border/40 bg-card shadow-sm rounded-2xl">
-          <CardHeader className="border-b border-border/40 bg-muted/20 py-4 px-6">
-            <CardTitle className="text-sm font-bold text-foreground">External Integrations</CardTitle>
-            <CardDescription className="text-xs text-muted-foreground">Connect third-party services</CardDescription>
-          </CardHeader>
-          <CardContent className="p-6 space-y-6">
-            <div className="grid gap-6">
-               <div className="p-6 rounded-2xl bg-sky-500/5 border border-sky-500/10 flex items-center justify-between gap-6">
-                  <div className="flex items-center gap-4">
-                     <div className="h-12 w-12 rounded-xl bg-sky-500/10 flex items-center justify-center text-sky-600">
-                        <Icons.Telegram className="h-6 w-6" />
-                     </div>
-                     <div className="space-y-0.5">
-                        <h4 className="text-sm font-bold text-sky-700">Telegram Bot API</h4>
-                        <p className="text-xs text-sky-600/70 font-medium">Auto-post updates to your channel</p>
-                     </div>
-                  </div>
-                  <Button variant="outline" className="border-sky-500/20 text-sky-600 hover:bg-sky-500/10 h-10 rounded-xl px-6 font-bold text-xs">Configure</Button>
-               </div>
-            </div>
-          </CardContent>
-        </Card>
-
         <div className="flex items-center justify-end gap-4 pt-4">
            <Button variant="outline" className="h-11 px-6 rounded-xl font-bold text-xs border-border/40" onClick={() => setLocalSettings(settings)}>Cancel</Button>
            <Button className="h-11 px-8 rounded-xl font-bold text-xs bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/20" onClick={handleSaveAll}>Save Changes</Button>
