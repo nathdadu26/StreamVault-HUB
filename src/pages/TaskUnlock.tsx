@@ -1,25 +1,41 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { Icons } from "@/src/components/Icons";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { MOCK_TASKS, MOCK_VIDEO } from "../data/mock";
+import { MOCK_TASKS } from "../data/mock";
 import { motion, AnimatePresence } from "motion/react";
 import { useTaskSettings } from "../hooks/useTaskSettings";
+import { getVideoBySlug, recordVisitor } from "../lib/api";
+import { Video } from "../types";
 
 export function TaskUnlock() {
   const navigate = useNavigate();
+  const { slug } = useParams<{ slug: string }>();
   const { settings, isLoading } = useTaskSettings();
+  const [video, setVideo] = useState<Video | null>(null);
   const [completedTasks, setCompletedTasks] = useState<string[]>([]);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [timer, setTimer] = useState(0);
+
+  useEffect(() => {
+    if (slug) {
+      recordVisitor(slug);
+      const found = getVideoBySlug(slug);
+      if (found) {
+        setVideo(found);
+      } else {
+        fetch(`/api/videos?slug=${encodeURIComponent(slug)}`)
+          .then((res) => (res.ok ? res.json() : null))
+          .then((data) => {
+            if (data && data.slug) setVideo(data);
+          })
+          .catch(() => {});
+      }
+    }
+  }, [slug]);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -44,6 +60,8 @@ export function TaskUnlock() {
   const isAllCompleted = completedTasks.length === MOCK_TASKS.length;
 
   if (isLoading) return null;
+
+  const currentSlug = video ? video.slug : (slug || "sjhu4ld7_ndlksk_h");
 
   return (
     <div className="flex flex-col gap-10 w-full max-w-2xl mx-auto pb-20 animate-in fade-in slide-in-from-bottom-8 duration-1000">
@@ -164,14 +182,13 @@ export function TaskUnlock() {
           );
         })}
 
-
         {/* Watch Video Button */}
         <div className="pt-4">
           <Button
             size="lg"
             variant={isAllCompleted ? "default" : "secondary"}
             disabled={!isAllCompleted}
-            onClick={() => navigate(`/s/${MOCK_VIDEO.slug}`)}
+            onClick={() => navigate(`/s/${currentSlug}`)}
             className={`w-full h-18 rounded-2xl text-lg font-black gap-4 transition-all duration-700 relative overflow-hidden ${
               isAllCompleted 
               ? "bg-emerald-500 hover:bg-emerald-600 text-white shadow-2xl shadow-emerald-500/30 scale-[1.02] border-none" 
@@ -201,9 +218,6 @@ export function TaskUnlock() {
                  </motion.div>
                )}
             </AnimatePresence>
-            {isAllCompleted && (
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full animate-[shimmer_2s_infinite] pointer-events-none" />
-            )}
           </Button>
         </div>
 

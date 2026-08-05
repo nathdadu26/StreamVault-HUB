@@ -1,72 +1,113 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Icons } from "@/src/components/Icons";
-import { MOCK_VISITORS } from "../../data/mock";
+import { getStoredVisitors } from "../../lib/api";
+import { Visitor } from "../../types";
 
 export function VisitorsStats() {
-  const deviceRanking = [
-    { name: "Windows", count: 450, percentage: 45 },
-    { name: "Android", count: 320, percentage: 32 },
-    { name: "iOS", count: 180, percentage: 18 },
-    { name: "macOS", count: 50, percentage: 5 },
-  ];
+  const [visitors, setVisitors] = useState<Visitor[]>([]);
 
-  const browserRanking = [
-    { name: "Chrome", count: 680, percentage: 68 },
-    { name: "Safari", count: 120, percentage: 12 },
-    { name: "Edge", count: 90, percentage: 9 },
-    { name: "Firefox", count: 60, percentage: 6 },
-    { name: "Opera", count: 50, percentage: 5 },
-  ];
+  useEffect(() => {
+    // Load stored visitors from Cloudflare D1 local store
+    const local = getStoredVisitors();
+    setVisitors(local);
+
+    // Also fetch from Cloudflare Pages Function endpoint /api/visitors
+    fetch("/api/visitors")
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) setVisitors(data);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Calculate real device & browser metrics from D1 visitors
+  const total = visitors.length || 1;
+  
+  const osCounts: Record<string, number> = {};
+  const browserCounts: Record<string, number> = {};
+
+  visitors.forEach((v) => {
+    osCounts[v.os] = (osCounts[v.os] || 0) + 1;
+    browserCounts[v.browser] = (browserCounts[v.browser] || 0) + 1;
+  });
+
+  const deviceRanking = Object.keys(osCounts).length > 0
+    ? Object.entries(osCounts).map(([name, count]) => ({
+        name,
+        count,
+        percentage: Math.round((count / total) * 100),
+      }))
+    : [
+        { name: "Windows", count: 0, percentage: 0 },
+        { name: "Android", count: 0, percentage: 0 },
+        { name: "iOS", count: 0, percentage: 0 },
+        { name: "macOS", count: 0, percentage: 0 },
+      ];
+
+  const browserRanking = Object.keys(browserCounts).length > 0
+    ? Object.entries(browserCounts).map(([name, count]) => ({
+        name,
+        count,
+        percentage: Math.round((count / total) * 100),
+      }))
+    : [
+        { name: "Chrome", count: 0, percentage: 0 },
+        { name: "Safari", count: 0, percentage: 0 },
+        { name: "Firefox", count: 0, percentage: 0 },
+      ];
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
-      {/* Top 10 Visitors Table */}
+      {/* Top Visitors Table */}
       <Card className="border border-border/40 bg-card shadow-sm overflow-hidden rounded-2xl">
         <CardHeader className="border-b border-border/40 bg-muted/20">
-          <CardTitle className="text-sm font-black uppercase tracking-widest text-foreground/80">Highest Visitors (Top 10)</CardTitle>
+          <CardTitle className="text-sm font-black uppercase tracking-widest text-foreground/80">
+            Cloudflare D1 Visitor Activity ({visitors.length} Total Logs)
+          </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs text-left">
-              <thead className="bg-muted/30 text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">
-                <tr>
-                  <th className="px-6 py-4">Rank</th>
-                  <th className="px-6 py-4">IP Address</th>
-                  <th className="px-6 py-4">Activity</th>
-                  <th className="px-6 py-4">System</th>
-                  <th className="px-6 py-4">Origin</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/40 font-medium">
-                {MOCK_VISITORS.map((visitor, idx) => (
-                  <tr key={visitor.id} className="hover:bg-muted/20 transition-colors">
-                    <td className="px-6 py-4">
-                      <span className={`h-6 w-6 flex items-center justify-center rounded-lg font-black text-[10px] ${idx < 3 ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20" : "bg-muted/50 text-muted-foreground/60"}`}>
-                        0{idx + 1}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 font-mono text-emerald-500 font-bold">{visitor.ip}</td>
-                    <td className="px-6 py-4">
-                       <div className="flex items-center gap-2">
-                          <span className="font-black text-foreground/80">{visitor.totalLinksOpened}</span>
-                          <span className="text-[10px] text-muted-foreground/40 font-bold uppercase tracking-tighter">interactions</span>
-                       </div>
-                    </td>
-                    <td className="px-6 py-4 text-muted-foreground/80">{visitor.os}</td>
-                    <td className="px-6 py-4 flex items-center gap-2">
-                       <div className="h-4 w-6 bg-muted/50 rounded-sm" />
-                       <span className="text-foreground/80">{visitor.country}</span>
-                    </td>
+          {visitors.length === 0 ? (
+            <div className="p-12 text-center text-xs text-muted-foreground font-bold">
+              No visitor traffic recorded in D1 yet. Access public links to register visitors.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-muted/30 text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">
+                  <tr>
+                    <th className="px-6 py-4">Rank</th>
+                    <th className="px-6 py-4">IP Address</th>
+                    <th className="px-6 py-4">Interactions</th>
+                    <th className="px-6 py-4">System</th>
+                    <th className="px-6 py-4">Origin</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-border/40 font-medium">
+                  {visitors.slice(0, 10).map((visitor, idx) => (
+                    <tr key={visitor.id} className="hover:bg-muted/20 transition-colors">
+                      <td className="px-6 py-4">
+                        <span className={`h-6 w-6 flex items-center justify-center rounded-lg font-black text-[10px] ${idx < 3 ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20" : "bg-muted/50 text-muted-foreground/60"}`}>
+                          0{idx + 1}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 font-mono text-emerald-500 font-bold">{visitor.ip}</td>
+                      <td className="px-6 py-4">
+                         <div className="flex items-center gap-2">
+                            <span className="font-black text-foreground/80">{visitor.totalLinksOpened}</span>
+                            <span className="text-[10px] text-muted-foreground/40 font-bold uppercase tracking-tighter">interactions</span>
+                         </div>
+                      </td>
+                      <td className="px-6 py-4 text-muted-foreground/80">{visitor.os} • {visitor.browser}</td>
+                      <td className="px-6 py-4 flex items-center gap-2">
+                         <div className="h-4 w-6 bg-muted/50 rounded-sm" />
+                         <span className="text-foreground/80">{visitor.country}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </CardContent>
       </Card>
 

@@ -1,7 +1,7 @@
 import { Icons } from "@/src/components/Icons";
-import { Badge } from "@/components/ui/badge";
 import { useTheme } from "@/src/components/ThemeProvider";
 import { Button } from "@/components/ui/button";
+import { useBackendHealth } from "@/src/hooks/useBackendHealth";
 
 export function AdminHeader({ title, onMenuClick, isMobile }: { 
   title: string; 
@@ -9,6 +9,7 @@ export function AdminHeader({ title, onMenuClick, isMobile }: {
   isMobile: boolean;
 }) {
   const { theme, setTheme } = useTheme();
+  const { isOnline } = useBackendHealth();
 
   return (
     <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b bg-background/80 backdrop-blur-md px-4 md:px-8 transition-colors">
@@ -29,10 +30,17 @@ export function AdminHeader({ title, onMenuClick, isMobile }: {
 
       <div className="flex items-center gap-3">
         <div className="hidden sm:flex items-center gap-2">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[10px] font-black uppercase tracking-wider">
-            <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            System Online
-          </div>
+          {isOnline ? (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[10px] font-black uppercase tracking-wider">
+              <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              SYSTEM ONLINE
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-500 text-[10px] font-black uppercase tracking-wider">
+              <div className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+              SYSTEM OFFLINE
+            </div>
+          )}
         </div>
 
         <div className="h-8 w-px bg-border/50 mx-1 hidden sm:block" />

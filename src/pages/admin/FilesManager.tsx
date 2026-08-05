@@ -22,6 +22,7 @@ import {
   ProcessingStep 
 } from "../../lib/api";
 import { PlyrPlayer } from "../../components/PlyrPlayer";
+import { useBackendHealth } from "../../hooks/useBackendHealth";
 
 export function FilesManager() {
   const [files, setFiles] = useState<Video[]>([]);
@@ -35,6 +36,7 @@ export function FilesManager() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { isOnline } = useBackendHealth();
 
   useEffect(() => {
     refreshFiles();
@@ -43,9 +45,19 @@ export function FilesManager() {
   const refreshFiles = () => {
     const loaded = getStoredFiles();
     setFiles(loaded);
+
+    fetch("/api/videos")
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setFiles(data);
+        }
+      })
+      .catch(() => {});
   };
 
   const handleFilesSelected = (fileList: FileList | File[]) => {
+    if (!isOnline) return;
     const validFiles = Array.from(fileList).filter((f) => f.type.startsWith("video/") || f.name.match(/\.(mp4|mov|mkv|avi|webm)$/i));
     if (validFiles.length === 0) return;
 
@@ -78,7 +90,6 @@ export function FilesManager() {
         prev.map((q) => (q.id === item.id ? { ...q, progress: 100, step: "Completed", completedVideo: resultVideo } : q))
       );
 
-      // Refresh table immediately after completion
       refreshFiles();
     } catch (err) {
       setUploadQueue((prev) =>
@@ -89,7 +100,7 @@ export function FilesManager() {
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
-    setIsDragging(true);
+    if (isOnline) setIsDragging(true);
   };
 
   const handleDragLeave = (e: React.DragEvent) => {
@@ -100,7 +111,7 @@ export function FilesManager() {
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+    if (isOnline && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       handleFilesSelected(e.dataTransfer.files);
     }
   };
@@ -134,6 +145,7 @@ export function FilesManager() {
         accept="video/*"
         multiple
         className="hidden"
+        disabled={!isOnline}
       />
 
       {/* TOP: Large Upload Card (Always Visible) */}
@@ -146,33 +158,57 @@ export function FilesManager() {
                 Upload videos for automated MP4 conversion, thumbnail extraction & D1/R2 storage
               </CardDescription>
             </div>
-            <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-[9px] font-black uppercase tracking-widest">
-              D1 & R2 Ready
-            </Badge>
+            {isOnline ? (
+              <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-[9px] font-black uppercase tracking-widest">
+                Koyeb Server Ready
+              </Badge>
+            ) : (
+              <Badge variant="destructive" className="text-[9px] font-black uppercase tracking-widest">
+                Koyeb Server Offline
+              </Badge>
+            )}
           </div>
         </CardHeader>
         <CardContent className="p-8 space-y-6">
+          {/* Offline Banner Warning */}
+          {!isOnline && (
+            <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-500 flex items-center gap-3 text-xs font-bold animate-in fade-in duration-300">
+              <Icons.AlertTriangle className="h-5 w-5 shrink-0" />
+              <span>The processing server is currently offline. Video uploads are temporarily unavailable.</span>
+            </div>
+          )}
+
           {/* Large Dashed Drop Area */}
           <div
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
-            onClick={() => fileInputRef.current?.click()}
-            className={`border-2 border-dashed rounded-2xl p-10 flex flex-col items-center justify-center gap-4 cursor-pointer transition-all duration-300 group ${
-              isDragging
-                ? "border-emerald-500 bg-emerald-500/10 scale-[1.01]"
-                : "border-border/60 hover:border-emerald-500/60 bg-muted/10 hover:bg-muted/20"
+            onClick={() => isOnline && fileInputRef.current?.click()}
+            className={`border-2 border-dashed rounded-2xl p-10 flex flex-col items-center justify-center gap-4 transition-all duration-300 group ${
+              !isOnline
+                ? "border-border/30 bg-muted/5 opacity-50 cursor-not-allowed"
+                : isDragging
+                ? "border-emerald-500 bg-emerald-500/10 scale-[1.01] cursor-pointer"
+                : "border-border/60 hover:border-emerald-500/60 bg-muted/10 hover:bg-muted/20 cursor-pointer"
             }`}
           >
-            <div className="h-16 w-16 rounded-2xl bg-emerald-500/10 flex items-center justify-center text-emerald-500 group-hover:scale-110 transition-transform">
+            <div className={`h-16 w-16 rounded-2xl flex items-center justify-center transition-transform ${
+              isOnline ? "bg-emerald-500/10 text-emerald-500 group-hover:scale-110" : "bg-muted text-muted-foreground"
+            }`}>
               <Icons.Upload className="h-8 w-8" />
             </div>
             <div className="text-center space-y-1">
               <h3 className="font-black text-base text-foreground/90">
-                Drag & Drop video here or <span className="text-emerald-500 underline underline-offset-4">Click to Browse</span>
+                {isOnline ? (
+                  <>Drag & Drop video here or <span className="text-emerald-500 underline underline-offset-4">Click to Browse</span></>
+                ) : (
+                  <span className="text-muted-foreground">Upload Server Disconnected</span>
+                )}
               </h3>
               <p className="text-xs text-muted-foreground font-medium">
-                Supports MP4, MOV, MKV, AVI, WEBM (Automated conversion to MP4 & 5 Thumbnails)
+                {isOnline 
+                  ? "Supports MP4, MOV, MKV, AVI, WEBM (Automated conversion to MP4 & 5 Thumbnails)"
+                  : "The website and admin dashboard continue working directly via Cloudflare D1"}
               </p>
             </div>
           </div>

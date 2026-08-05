@@ -1,28 +1,32 @@
 import { useState, useEffect } from "react";
 import { TaskSettings } from "../types";
-import { DEFAULT_SETTINGS } from "../data/mock";
-
-const SETTINGS_KEY = "stream_vault_task_settings";
+import { getStoredSettings, saveStoredSettings } from "../lib/api";
 
 export function useTaskSettings() {
-  const [settings, setSettings] = useState<TaskSettings>(DEFAULT_SETTINGS);
+  const [settings, setSettings] = useState<TaskSettings>(getStoredSettings);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const saved = localStorage.getItem(SETTINGS_KEY);
-    if (saved) {
-      try {
-        setSettings(JSON.parse(saved));
-      } catch (e) {
-        console.error("Failed to parse settings", e);
-      }
-    }
+    // Load stored settings from Cloudflare D1 / D1 store
+    const current = getStoredSettings();
+    setSettings(current);
     setIsLoading(false);
+
+    // Also attempt async fetch from Cloudflare Pages Function endpoint /api/settings
+    fetch("/api/settings")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && (data.task1Url !== undefined || data.downloadTaskUrl !== undefined)) {
+          setSettings(data);
+          saveStoredSettings(data);
+        }
+      })
+      .catch(() => {});
   }, []);
 
   const saveSettings = (newSettings: TaskSettings) => {
     setSettings(newSettings);
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(newSettings));
+    saveStoredSettings(newSettings);
   };
 
   return { settings, saveSettings, isLoading };
