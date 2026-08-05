@@ -1,13 +1,32 @@
-export default function Footer() {
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { Icons } from "@/src/components/Icons";
+
+export function Footer() {
+  const currentYear = new Date().getFullYear();
+
   return (
-    <footer className="border-t py-6 md:py-0 bg-muted/30">
-      <div className="container mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-4 md:h-16">
-        <p className="text-sm text-muted-foreground">
-          © {new Date().getFullYear()} StreamVault HUB. All rights reserved.
-        </p>
-        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-          <a href="#" className="hover:underline underline-offset-4">Privacy</a>
-          <a href="#" className="hover:underline underline-offset-4">Terms</a>
+    <footer className="w-full border-t border-border/40 bg-muted/20 py-10 mt-auto">
+      <div className="container mx-auto px-6 flex flex-col items-center gap-6">
+        <div className="flex flex-col items-center gap-2">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="h-6 w-6 rounded bg-emerald-500/10 flex items-center justify-center text-emerald-500">
+               <Icons.ShieldCheck className="h-4 w-4" />
+            </div>
+            <span className="text-sm font-black tracking-tight text-foreground/80 uppercase">StreamVault</span>
+          </div>
+          <p className="text-[10px] font-black text-muted-foreground/40 uppercase tracking-[0.2em] text-center">
+            © {currentYear} Global Media Distribution • Secure Access Guaranteed
+          </p>
+        </div>
+        
+        <div className="flex items-center gap-8 text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">
+           <a href="#" className="hover:text-emerald-500 transition-colors">Privacy</a>
+           <a href="#" className="hover:text-emerald-500 transition-colors">Terms</a>
+           <a href="#" className="hover:text-emerald-500 transition-colors">Abuse</a>
         </div>
       </div>
     </footer>

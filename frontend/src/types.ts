@@ -1,10 +1,15 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 export interface Video {
   id: string;
   slug: string;
   title: string;
   videoUrl: string;
   thumbnailUrl: string;
-  thumbnails: string[];
+  thumbnails: string[]; // R2 links for all extracted thumbs
   fileSize: string;
   duration: string;
   views: number;
@@ -14,6 +19,19 @@ export interface Video {
   releaseYear: number;
   genres: string[];
   quality: string;
+}
+
+export interface TaskSettings {
+  task1Url: string;
+  task2Url: string;
+  downloadTaskUrl: string;
+  vpnDetectionEnabled: boolean;
+  adBlockDetectionEnabled: boolean;
+  linkExpirationMinutes: number;
+  telegramBotToken: string;
+  telegramPostInterval: number;
+  telegramPostUnit: "minutes" | "hours";
+  telegramChannelUrl: string;
 }
 
 export interface Visitor {
@@ -27,15 +45,18 @@ export interface Visitor {
   totalLinksOpened: number;
 }
 
-export interface TaskSettings {
-  task1Url: string;
-  task2Url: string;
-  downloadTaskUrl: string;
-  vpnDetectionEnabled: boolean;
-  adBlockDetectionEnabled: boolean;
-  linkExpirationMinutes: number;
-  telegramBotToken: string;
-  telegramPostInterval: number;
-  telegramPostUnit: "minutes" | "hours" | "days";
-  telegramChannelUrl: string;
+export interface DeviceStats {
+  device: string;
+  count: number;
+}
+
+export interface BrowserStats {
+  browser: string;
+  count: number;
+}
+
+export interface AnalyticsSummary {
+  totalFiles: number;
+  totalViews: number;
+  monthlyViews: { month: string; views: number }[];
 }

@@ -1,23 +1,137 @@
-import { Video, TaskSettings } from "../types";
+import { Video, Visitor, TaskSettings } from "../types";
+import { KOYEB_SERVER_URL } from "../hooks/useBackendHealth";
 
-const KOYEB_SERVER_URL = import.meta.env.VITE_KOYEB_PROCESSING_SERVER_URL || "http://localhost:3000";
+const STORAGE_FILES_KEY = "streamvault_d1_files";
+const STORAGE_VISITORS_KEY = "streamvault_d1_visitors";
+const STORAGE_SETTINGS_KEY = "streamvault_d1_settings";
 
-// Local storage keys
-const STORAGE_KEY_FILES = "atoz_links_files";
-const STORAGE_KEY_SETTINGS = "atoz_links_settings";
+export function generateRandomSlug(length = 18): string {
+  const chars = "abcdefghijklmnopqrstuvwxyz0123456789_";
+  let result = "";
+  for (let i = 0; i < length; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
 
+export function generateUniqueSlug(existingFiles: Video[]): string {
+  const existingSlugs = new Set(existingFiles.map((f) => f.slug));
+  let slug = generateRandomSlug(18);
+  while (existingSlugs.has(slug)) {
+    slug = generateRandomSlug(18);
+  }
+  return slug;
+}
+
+// Direct D1 Files Persistence (Cloudflare Pages Functions + Fallback local D1 store)
 export function getStoredFiles(): Video[] {
-  const stored = localStorage.getItem(STORAGE_KEY_FILES);
-  return stored ? JSON.parse(stored) : [];
+  const data = localStorage.getItem(STORAGE_FILES_KEY);
+  if (!data) return [];
+  try {
+    return JSON.parse(data);
+  } catch {
+    return [];
+  }
 }
 
-export function saveStoredFiles(files: Video[]) {
-  localStorage.setItem(STORAGE_KEY_FILES, JSON.stringify(files));
+export function saveStoredFiles(files: Video[]): void {
+  localStorage.setItem(STORAGE_FILES_KEY, JSON.stringify(files));
 }
 
+export function getVideoBySlug(slug: string): Video | undefined {
+  const files = getStoredFiles();
+  return files.find((f) => f.slug === slug);
+}
+
+export function updateFileThumbnail(id: string, newThumbnailUrl: string, title?: string): Video[] {
+  const files = getStoredFiles();
+  const updated = files.map((f) => {
+    if (f.id === id) {
+      return {
+        ...f,
+        thumbnailUrl: newThumbnailUrl,
+        ...(title ? { title } : {}),
+      };
+    }
+    return f;
+  });
+  saveStoredFiles(updated);
+  
+  // Also try to push to Cloudflare D1 Function if available
+  fetch("/api/videos", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id, thumbnailUrl: newThumbnailUrl, title }),
+  }).catch(() => {});
+
+  return updated;
+}
+
+export function deleteFile(id: string): Video[] {
+  const files = getStoredFiles();
+  const filtered = files.filter((f) => f.id !== id);
+  saveStoredFiles(filtered);
+
+  // Also try to delete from Cloudflare D1 Function if available
+  fetch(`/api/videos?id=${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  }).catch(() => {});
+
+  return filtered;
+}
+
+// Direct D1 Visitors Persistence
+export function getStoredVisitors(): Visitor[] {
+  const data = localStorage.getItem(STORAGE_VISITORS_KEY);
+  if (!data) return [];
+  try {
+    return JSON.parse(data);
+  } catch {
+    return [];
+  }
+}
+
+export function recordVisitor(slug: string = ""): void {
+  const current = getStoredVisitors();
+  const userAgent = navigator.userAgent;
+  let os = "Desktop";
+  if (userAgent.includes("Android")) os = "Android";
+  else if (userAgent.includes("iPhone") || userAgent.includes("iPad")) os = "iOS";
+  else if (userAgent.includes("Mac")) os = "macOS";
+  else if (userAgent.includes("Win")) os = "Windows";
+
+  let browser = "Browser";
+  if (userAgent.includes("Chrome")) browser = "Chrome";
+  else if (userAgent.includes("Safari")) browser = "Safari";
+  else if (userAgent.includes("Firefox")) browser = "Firefox";
+  else if (userAgent.includes("Edg")) browser = "Edge";
+
+  const newVisitor: Visitor = {
+    id: `v_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+    slug,
+    ip: "127.0.0.1",
+    os,
+    browser,
+    country: "Direct Access",
+    visitedAt: new Date().toISOString().replace("T", " ").substring(0, 16),
+    totalLinksOpened: 1,
+  };
+
+  const updated = [newVisitor, ...current].slice(0, 100);
+  localStorage.setItem(STORAGE_VISITORS_KEY, JSON.stringify(updated));
+
+  // Sync to Cloudflare D1
+  fetch("/api/visitors", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(newVisitor),
+  }).catch(() => {});
+}
+
+// Direct D1 Settings Persistence
 export function getStoredSettings(): TaskSettings {
-  const stored = localStorage.getItem(STORAGE_KEY_SETTINGS);
-  return stored ? JSON.parse(stored) : {
+  const data = localStorage.getItem(STORAGE_SETTINGS_KEY);
+  const defaults: TaskSettings = {
     task1Url: "",
     task2Url: "",
     downloadTaskUrl: "",
@@ -27,23 +141,30 @@ export function getStoredSettings(): TaskSettings {
     telegramBotToken: "",
     telegramPostInterval: 30,
     telegramPostUnit: "minutes",
-    telegramChannelUrl: ""
+    telegramChannelUrl: "",
   };
-}
 
-export function saveStoredSettings(settings: TaskSettings) {
-  localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(settings));
-}
-
-export function generateUniqueSlug(existing: Video[]): string {
-  const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  let slug = "";
-  for (let i = 0; i < 8; i++) {
-    slug += chars.charAt(Math.floor(Math.random() * chars.length));
+  if (!data) return defaults;
+  try {
+    const parsed = JSON.parse(data);
+    return { ...defaults, ...parsed };
+  } catch {
+    return defaults;
   }
-  if (existing.some((f) => f.slug === slug)) return generateUniqueSlug(existing);
-  return slug;
 }
+
+export function saveStoredSettings(settings: TaskSettings): void {
+  localStorage.setItem(STORAGE_SETTINGS_KEY, JSON.stringify(settings));
+  // Sync to Cloudflare D1
+  fetch("/api/settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(settings),
+  }).catch(() => {});
+}
+
+// Generate 5 real image thumbnails from a Video file element using canvas
+// REMOVED: Frontend must never process videos. Logic moved to Koyeb Backend.
 
 export type ProcessingStep = 
   | "Uploading to Koyeb Server..."
@@ -56,7 +177,18 @@ export type ProcessingStep =
   | "Completed"
   | "Failed";
 
-export async function processVideoUpload(
+export interface UploadQueueItem {
+  id: string;
+  file: File;
+  name: string;
+  sizeFormatted: string;
+  progress: number;
+  step: ProcessingStep;
+  error?: string;
+  completedVideo?: Video;
+}
+
+export async function uploadAndProcessVideo(
   file: File,
   onProgress: (progress: number, step: ProcessingStep) => void
 ): Promise<Video> {
@@ -75,7 +207,7 @@ export async function processVideoUpload(
     });
 
     if (!res.ok) {
-      const errorData = await res.json().catch(() => ({}));
+      const errorData = await res.json().catch(() => ({})) as any;
       throw new Error(errorData.error || "Server processing failed");
     }
 
@@ -89,7 +221,7 @@ export async function processVideoUpload(
     const videoObject: Video = {
       ...data.video,
       id: data.video.id || `vid_${Date.now()}`,
-      slug: slug,
+      slug: slug, // Keep the slug generated by frontend or used by server
       views: 0,
       likes: 0,
       dislikes: 0,
@@ -117,37 +249,4 @@ export async function processVideoUpload(
     onProgress(0, "Failed");
     throw err;
   }
-}
-
-export function updateFileThumbnail(id: string, newThumbnailUrl: string, title?: string): Video[] {
-  const files = getStoredFiles();
-  const updated = files.map((f) => {
-    if (f.id === id) {
-      return { ...f, thumbnailUrl: newThumbnailUrl, title: title || f.title };
-    }
-    return f;
-  });
-  saveStoredFiles(updated);
-  
-  // Sync to API
-  fetch("/api/videos", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id, thumbnailUrl: newThumbnailUrl, title }),
-  }).catch(() => {});
-  
-  return updated;
-}
-
-export function deleteFile(id: string): Video[] {
-  const files = getStoredFiles();
-  const updated = files.filter((f) => f.id !== id);
-  saveStoredFiles(updated);
-  
-  // Sync to API
-  fetch(`/api/videos?id=${id}`, {
-    method: "DELETE",
-  }).catch(() => {});
-  
-  return updated;
 }
