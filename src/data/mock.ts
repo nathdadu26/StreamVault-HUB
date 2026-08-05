@@ -7,9 +7,8 @@ import { Video, Visitor, AnalyticsSummary, TaskSettings } from "../types";
 
 export const MOCK_VIDEO: Video = {
   id: "1",
-  slug: "backrooms-2022",
+  slug: "sjhu4ld7_ndlksk_h",
   title: "Watch Backrooms (2022)",
-  originalName: "backrooms_final_v2.mp4",
   videoUrl: "https://example.com/video.mp4",
   thumbnailUrl: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1200&q=80",
   thumbnails: [

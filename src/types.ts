@@ -7,7 +7,6 @@ export interface Video {
   id: string;
   slug: string;
   title: string;
-  originalName: string;
   videoUrl: string;
   thumbnailUrl: string;
   thumbnails: string[]; // R2 links for all extracted thumbs
