@@ -1,0 +1,6 @@
+{
+  "name": "StreamVault Hub",
+  "description": "A premium video streaming platform with task-based unlocking and community integration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

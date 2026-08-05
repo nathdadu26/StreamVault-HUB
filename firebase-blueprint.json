@@ -1,0 +1,63 @@
+{
+  "entities": {
+    "Video": {
+      "title": "Video",
+      "description": "Metadata for a streaming video.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "releaseYear": { "type": "integer" },
+        "duration": { "type": "string" },
+        "quality": { "type": "string" },
+        "genres": { "type": "array", "items": { "type": "string" } },
+        "views": { "type": "integer" },
+        "fileSize": { "type": "string" },
+        "uploadedAt": { "type": "string", "format": "date-time" },
+        "videoUrl": { "type": "string" },
+        "thumbnailUrl": { "type": "string" },
+        "likes": { "type": "integer" },
+        "dislikes": { "type": "integer" }
+      },
+      "required": ["title", "videoUrl", "thumbnailUrl"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "A task required to unlock a video.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "type": { "type": "string", "enum": ["click", "wait"] },
+        "url": { "type": "string" },
+        "waitTimeSeconds": { "type": "integer" },
+        "order": { "type": "integer" }
+      },
+      "required": ["title", "url", "waitTimeSeconds", "order"]
+    },
+    "Analytics": {
+      "title": "Analytics",
+      "description": "Tracking view counts for videos.",
+      "type": "object",
+      "properties": {
+        "videoId": { "type": "string" },
+        "views": { "type": "integer" },
+        "lastUpdated": { "type": "string", "format": "date-time" }
+      },
+      "required": ["videoId", "views"]
+    }
+  },
+  "firestore": {
+    "/videos/{videoId}": {
+      "schema": "Video",
+      "description": "Collection of available videos."
+    },
+    "/tasks/{taskId}": {
+      "schema": "Task",
+      "description": "Tasks that must be completed."
+    },
+    "/analytics/{analyticsId}": {
+      "schema": "Analytics",
+      "description": "View tracking data."
+    }
+  }
+}
