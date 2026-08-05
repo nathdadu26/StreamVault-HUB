@@ -12,7 +12,7 @@ This project is now split into two independent modules for production readiness.
 ### 1. Backend (Koyeb)
 - Create a new service on Koyeb.
 - Choose "Docker" as the deployment method.
-- Point it to the `/backend` directory (or just the root if you use the root Dockerfile).
+- **Run Directory / Build Context**: Set this to `backend` (this is the directory where the Dockerfile is located).
 - Set the following Environment Variables in Koyeb:
   - `CLOUDFLARE_ACCOUNT_ID`
   - `CLOUDFLARE_R2_ACCESS_KEY_ID`
