@@ -105,6 +105,20 @@ app.post("/upload", upload.single("video"), async (req, res) => {
       return parallelUploads3.done();
     };
 
+    // Get metadata before cleanup
+    const stats = fs.statSync(outputPath);
+    const fileSize = (stats.size / (1024 * 1024)).toFixed(2) + " MB";
+    
+    const duration: string = await new Promise((resolve) => {
+      ffmpeg.ffprobe(outputPath, (err, metadata) => {
+        if (err) return resolve("00:00");
+        const seconds = metadata.format.duration || 0;
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        resolve(`${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`);
+      });
+    });
+
     console.log("[R2] Uploading video...");
     const videoKey = `videos/${formattedName}`;
     await uploadFileToR2(outputPath, videoKey, "video/mp4");
@@ -137,7 +151,8 @@ app.post("/upload", upload.single("video"), async (req, res) => {
         videoUrl: `${publicUrlBase}/${videoKey}`,
         thumbnailUrl: thumbnails[0] || "",
         thumbnails: thumbnails,
-        fileSize: (fs.statSync(outputPath).size / (1024 * 1024)).toFixed(2) + " MB",
+        fileSize,
+        duration,
         uploadedAt: new Date().toISOString(),
       }
     });
