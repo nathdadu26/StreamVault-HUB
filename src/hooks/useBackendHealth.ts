@@ -38,7 +38,7 @@ export function useBackendHealth() {
       const body = await response.json().catch((e) => {
         console.error("[BackendHealth] Failed to parse JSON body:", e);
         return null;
-      });
+      }) as any;
       
       console.log("[BackendHealth] Response Body:", body);
 

@@ -22,7 +22,7 @@ export function VideoPlayer() {
       } else {
         fetch(`/api/videos?slug=${encodeURIComponent(slug)}`)
           .then((res) => (res.ok ? res.json() : null))
-          .then((data) => {
+          .then((data: any) => {
             if (data && data.slug) setVideo(data);
           })
           .catch(() => {});

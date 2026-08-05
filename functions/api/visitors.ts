@@ -1,39 +1,35 @@
-/**
- * Cloudflare Pages Function for D1 Visitors Analytics
- * Route: /api/visitors
- */
-
-export async function onRequestGet(context: any) {
-  const { env } = context;
-  try {
-    const visitors = await env.DB.prepare(
-      "SELECT * FROM visitors ORDER BY visited_at DESC LIMIT 50"
-    ).all();
-    return Response.json(visitors.results || []);
-  } catch (err: any) {
-    return Response.json({ error: err.message }, { status: 500 });
-  }
+interface Env {
+  DB: D1Database;
 }
 
-export async function onRequestPost(context: any) {
-  const { env, request } = context;
+export const onRequestGet: PagesFunction<Env> = async (context) => {
+  const { DB } = context.env;
   try {
-    const body: any = await request.json();
-    await env.DB.prepare(
-      "INSERT INTO visitors (id, slug, ip, os, browser, country, visited_at, total_links_opened) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    const { results } = await DB.prepare("SELECT * FROM visitors ORDER BY visitedAt DESC LIMIT 100").all();
+    return Response.json(results);
+  } catch (err: any) {
+    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
+  }
+};
+
+export const onRequestPost: PagesFunction<Env> = async (context) => {
+  const { DB } = context.env;
+  try {
+    const visitor = await context.request.json() as any;
+    await DB.prepare(
+      "INSERT INTO visitors (id, slug, ip, os, browser, country, visitedAt, totalLinksOpened) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
     ).bind(
-      body.id || `v_${Date.now()}`,
-      body.slug || "",
-      body.ip || "127.0.0.1",
-      body.os || "Unknown OS",
-      body.browser || "Unknown Browser",
-      body.country || "Direct Access",
-      body.visitedAt || new Date().toISOString(),
-      body.totalLinksOpened || 1
+      visitor.id,
+      visitor.slug,
+      visitor.ip,
+      visitor.os,
+      visitor.browser,
+      visitor.country,
+      visitor.visitedAt,
+      visitor.totalLinksOpened
     ).run();
-
-    return Response.json({ success: true }, { status: 201 });
+    return Response.json({ success: true });
   } catch (err: any) {
-    return Response.json({ error: err.message }, { status: 500 });
+    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
   }
-}
+};

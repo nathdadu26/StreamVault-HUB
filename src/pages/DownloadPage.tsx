@@ -43,7 +43,7 @@ export function DownloadPage() {
     if (settings.vpnDetectionEnabled) {
       try {
         const res = await fetch("https://ipapi.co/json/");
-        const data = await res.json();
+        const data = await res.json() as any;
         if (data.proxy || data.hosting || data.org?.toLowerCase().includes("vpn")) {
           setIsBlocked("vpn");
           setIsCheckingSecurity(false);
@@ -98,7 +98,7 @@ export function DownloadPage() {
       } else {
         fetch(`/api/videos?slug=${encodeURIComponent(slug)}`)
           .then((res) => (res.ok ? res.json() : null))
-          .then((data) => {
+          .then((data: any) => {
             if (data && data.slug) setVideo(data);
           })
           .catch(() => {});

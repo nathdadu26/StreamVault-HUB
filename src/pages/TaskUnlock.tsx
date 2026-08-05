@@ -46,7 +46,7 @@ export function TaskUnlock() {
     if (settings.vpnDetectionEnabled) {
       try {
         const res = await fetch("https://ipapi.co/json/");
-        const data = await res.json();
+        const data = await res.json() as any;
         // Basic heuristic: check for proxy/vpn if the API provides it or check common hosting providers
         // Note: Free tier might not have 'proxy' field, so we use a simplified check for this demo
         if (data.proxy || data.hosting || data.org?.toLowerCase().includes("vpn")) {
@@ -103,7 +103,7 @@ export function TaskUnlock() {
       } else {
         fetch(`/api/videos?slug=${encodeURIComponent(slug)}`)
           .then((res) => (res.ok ? res.json() : null))
-          .then((data) => {
+          .then((data: any) => {
             if (data && data.slug) setVideo(data);
           })
           .catch(() => {});

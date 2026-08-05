@@ -15,7 +15,7 @@ export function useTaskSettings() {
     // Also attempt async fetch from Cloudflare Pages Function endpoint /api/settings
     fetch("/api/settings")
       .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
+      .then((data: any) => {
         if (data && (data.task1Url !== undefined || data.downloadTaskUrl !== undefined)) {
           setSettings(data);
           saveStoredSettings(data);

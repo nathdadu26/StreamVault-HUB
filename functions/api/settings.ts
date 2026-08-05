@@ -1,52 +1,39 @@
-/**
- * Cloudflare Pages Function for System Settings in D1
- * Route: /api/settings
- */
-
-export async function onRequestGet(context: any) {
-  const { env } = context;
-  try {
-    const settingsRow = await env.DB.prepare(
-      "SELECT * FROM settings WHERE id = 'global'"
-    ).first();
-
-    if (!settingsRow) {
-      return Response.json({
-        task1Url: "",
-        task2Url: "",
-        downloadTaskUrl: "",
-      });
-    }
-
-    return Response.json({
-      task1Url: settingsRow.task1_url || "",
-      task2Url: settingsRow.task2_url || "",
-      downloadTaskUrl: settingsRow.download_task_url || "",
-    });
-  } catch (err: any) {
-    return Response.json({ error: err.message }, { status: 500 });
-  }
+interface Env {
+  DB: D1Database;
 }
 
-export async function onRequestPost(context: any) {
-  const { env, request } = context;
+export const onRequestGet: PagesFunction<Env> = async (context) => {
+  const { DB } = context.env;
   try {
-    const body: any = await request.json();
-    await env.DB.prepare(
-      `INSERT INTO settings (id, task1_url, task2_url, download_task_url) 
-       VALUES ('global', ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET 
-         task1_url = excluded.task1_url,
-         task2_url = excluded.task2_url,
-         download_task_url = excluded.download_task_url`
-    ).bind(
-      body.task1Url || "",
-      body.task2Url || "",
-      body.downloadTaskUrl || ""
-    ).run();
+    const result = await DB.prepare("SELECT * FROM settings LIMIT 1").first();
+    return Response.json(result || {});
+  } catch (err: any) {
+    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
+  }
+};
 
+export const onRequestPost: PagesFunction<Env> = async (context) => {
+  const { DB } = context.env;
+  try {
+    const settings = await context.request.json() as any;
+    // Simple upsert logic for D1
+    await DB.prepare("DELETE FROM settings").run();
+    await DB.prepare(
+      "INSERT INTO settings (task1Url, task2Url, downloadTaskUrl, vpnDetectionEnabled, adBlockDetectionEnabled, linkExpirationMinutes, telegramBotToken, telegramPostInterval, telegramPostUnit, telegramChannelUrl) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).bind(
+      settings.task1Url,
+      settings.task2Url,
+      settings.downloadTaskUrl,
+      settings.vpnDetectionEnabled ? 1 : 0,
+      settings.adBlockDetectionEnabled ? 1 : 0,
+      settings.linkExpirationMinutes,
+      settings.telegramBotToken,
+      settings.telegramPostInterval,
+      settings.telegramPostUnit,
+      settings.telegramChannelUrl
+    ).run();
     return Response.json({ success: true });
   } catch (err: any) {
-    return Response.json({ error: err.message }, { status: 500 });
+    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
   }
-}
+};

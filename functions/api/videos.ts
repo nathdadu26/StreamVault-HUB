@@ -1,97 +1,76 @@
-/**
- * Cloudflare Pages Function for D1 Video Management
- * Route: /api/videos
- */
+interface Env {
+  DB: D1Database;
+}
 
-export async function onRequestGet(context: any) {
-  const { env, request } = context;
-  const url = new URL(request.url);
+export const onRequestGet: PagesFunction<Env> = async (context) => {
+  const { DB } = context.env;
+  const url = new URL(context.request.url);
   const slug = url.searchParams.get("slug");
-  const id = url.searchParams.get("id");
 
   try {
     if (slug) {
-      const video = await env.DB.prepare(
-        "SELECT * FROM videos WHERE slug = ?"
-      ).bind(slug).first();
-      if (!video) return new Response("Not Found", { status: 404 });
-      return Response.json(video);
+      const result = await DB.prepare("SELECT * FROM videos WHERE slug = ? LIMIT 1").bind(slug).first();
+      return Response.json(result || {});
     }
-
-    if (id) {
-      const video = await env.DB.prepare(
-        "SELECT * FROM videos WHERE id = ?"
-      ).bind(id).first();
-      if (!video) return new Response("Not Found", { status: 404 });
-      return Response.json(video);
-    }
-
-    const videos = await env.DB.prepare("SELECT * FROM videos ORDER BY created_at DESC").all();
-    return Response.json(videos.results || []);
+    const { results } = await DB.prepare("SELECT * FROM videos ORDER BY uploadedAt DESC").all();
+    return Response.json(results);
   } catch (err: any) {
-    return Response.json({ error: err.message }, { status: 500 });
+    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
   }
-}
+};
 
-export async function onRequestPost(context: any) {
-  const { env, request } = context;
+export const onRequestPost: PagesFunction<Env> = async (context) => {
+  const { DB } = context.env;
   try {
-    const body: any = await request.json();
-    await env.DB.prepare(
-      `INSERT INTO videos 
-      (id, slug, title, video_url, thumbnail_url, thumbnails, file_size, duration, views, likes, dislikes, uploaded_at, release_year, genres, quality) 
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    const video = await context.request.json() as any;
+    await DB.prepare(
+      "INSERT INTO videos (id, slug, title, videoUrl, thumbnailUrl, thumbnails, fileSize, duration, views, likes, dislikes, uploadedAt, releaseYear, genres, quality) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     ).bind(
-      body.id,
-      body.slug,
-      body.title,
-      body.videoUrl,
-      body.thumbnailUrl,
-      JSON.stringify(body.thumbnails || []),
-      body.fileSize || "0 MB",
-      body.duration || "00:00",
-      body.views || 0,
-      body.likes || 0,
-      body.dislikes || 0,
-      body.uploadedAt || new Date().toISOString(),
-      body.releaseYear || new Date().getFullYear(),
-      JSON.stringify(body.genres || []),
-      body.quality || "1080p"
+      video.id,
+      video.slug,
+      video.title,
+      video.videoUrl,
+      video.thumbnailUrl,
+      JSON.stringify(video.thumbnails),
+      video.fileSize,
+      video.duration,
+      video.views || 0,
+      video.likes || 0,
+      video.dislikes || 0,
+      video.uploadedAt,
+      video.releaseYear,
+      JSON.stringify(video.genres),
+      video.quality
     ).run();
-
-    return Response.json({ success: true, id: body.id }, { status: 201 });
-  } catch (err: any) {
-    return Response.json({ error: err.message }, { status: 500 });
-  }
-}
-
-export async function onRequestPut(context: any) {
-  const { env, request } = context;
-  try {
-    const body: any = await request.json();
-    if (!body.id) return Response.json({ error: "Missing video ID" }, { status: 400 });
-
-    await env.DB.prepare(
-      "UPDATE videos SET title = ?, thumbnail_url = ? WHERE id = ?"
-    ).bind(body.title, body.thumbnailUrl, body.id).run();
-
     return Response.json({ success: true });
   } catch (err: any) {
-    return Response.json({ error: err.message }, { status: 500 });
+    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
   }
-}
+};
 
-export async function onRequestDelete(context: any) {
-  const { env, request } = context;
-  const url = new URL(request.url);
+export const onRequestPut: PagesFunction<Env> = async (context) => {
+  const { DB } = context.env;
+  try {
+    const { id, thumbnailUrl, title } = await context.request.json() as any;
+    if (title) {
+      await DB.prepare("UPDATE videos SET thumbnailUrl = ?, title = ? WHERE id = ?").bind(thumbnailUrl, title, id).run();
+    } else {
+      await DB.prepare("UPDATE videos SET thumbnailUrl = ? WHERE id = ?").bind(thumbnailUrl, id).run();
+    }
+    return Response.json({ success: true });
+  } catch (err: any) {
+    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
+  }
+};
+
+export const onRequestDelete: PagesFunction<Env> = async (context) => {
+  const { DB } = context.env;
+  const url = new URL(context.request.url);
   const id = url.searchParams.get("id");
-
-  if (!id) return Response.json({ error: "Missing ID" }, { status: 400 });
-
   try {
-    await env.DB.prepare("DELETE FROM videos WHERE id = ?").bind(id).run();
+    await DB.prepare("DELETE FROM videos WHERE id = ?").bind(id).run();
     return Response.json({ success: true });
   } catch (err: any) {
-    return Response.json({ error: err.message }, { status: 500 });
+    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
   }
-}
+};
