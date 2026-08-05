@@ -39,6 +39,7 @@ export const DEFAULT_SETTINGS: TaskSettings = {
   telegramBotToken: "",
   telegramPostInterval: 30,
   telegramPostUnit: "minutes",
+  telegramChannelUrl: "https://t.me/streamvault_hub",
 };
 
 export const MOCK_VISITORS: Visitor[] = [

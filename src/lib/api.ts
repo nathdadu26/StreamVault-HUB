@@ -141,6 +141,7 @@ export function getStoredSettings(): TaskSettings {
     telegramBotToken: "",
     telegramPostInterval: 30,
     telegramPostUnit: "minutes",
+    telegramChannelUrl: "",
   };
 
   if (!data) return defaults;

@@ -353,18 +353,25 @@ export function TaskUnlock() {
         </div>
 
         {/* Telegram Card */}
-        <Card className="bg-sky-500/5 border border-sky-500/10 rounded-2xl p-2 mt-8">
+        <Card className={`bg-sky-500/5 border border-sky-500/10 rounded-2xl p-2 mt-8 transition-all ${!settings.telegramChannelUrl ? "opacity-60 grayscale" : ""}`}>
           <CardContent className="p-4 flex items-center justify-between gap-6">
             <div className="flex items-center gap-4">
               <div className="h-12 w-12 rounded-2xl bg-sky-500/10 flex items-center justify-center text-sky-500">
-                <Icons.Users className="h-6 w-6" />
+                <Icons.Bot className="h-6 w-6" />
               </div>
               <div className="space-y-0.5">
                 <h4 className="font-black text-xs text-sky-600 uppercase tracking-widest">Join Telegram</h4>
-                <p className="text-[10px] text-muted-foreground font-medium">Instant alerts for premium releases</p>
+                <p className="text-[10px] text-muted-foreground font-medium">
+                  {settings.telegramChannelUrl ? "Instant alerts for premium releases" : "Telegram link is not configured."}
+                </p>
               </div>
             </div>
-            <Button variant="outline" className="h-10 rounded-xl px-5 border-sky-500/20 text-sky-600 font-bold text-xs hover:bg-sky-500/10">
+            <Button 
+              variant="outline" 
+              disabled={!settings.telegramChannelUrl}
+              onClick={() => settings.telegramChannelUrl && window.open(settings.telegramChannelUrl, "_blank")}
+              className="h-10 rounded-xl px-5 border-sky-500/20 text-sky-600 font-bold text-xs hover:bg-sky-500/10"
+            >
               Join Hub
             </Button>
           </CardContent>

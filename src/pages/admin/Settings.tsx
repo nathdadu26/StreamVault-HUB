@@ -60,6 +60,36 @@ export function Settings() {
         {/* Task Links Management */}
         <TaskLinksManagement />
 
+        {/* Telegram Community Management */}
+        <Card className="border border-border/40 bg-card shadow-sm rounded-2xl">
+          <CardHeader className="border-b border-border/40 bg-muted/20 py-4 px-6">
+            <CardTitle className="text-sm font-bold text-foreground">Telegram Community</CardTitle>
+            <CardDescription className="text-xs text-muted-foreground">Manage the global Telegram community link used across the website</CardDescription>
+          </CardHeader>
+          <CardContent className="p-6 space-y-6">
+            <div className="space-y-3">
+              <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Telegram Channel URL</Label>
+              <div className="flex gap-3">
+                <Input 
+                  placeholder="https://t.me/your_channel"
+                  value={localSettings.telegramChannelUrl}
+                  onChange={(e) => setLocalSettings(prev => ({ ...prev, telegramChannelUrl: e.target.value }))}
+                  className="h-11 rounded-xl bg-muted/20 border-border/40 focus-visible:ring-emerald-500/20"
+                />
+                <Button 
+                  onClick={handleSaveAll}
+                  className="h-11 px-8 rounded-xl font-bold text-xs bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/20"
+                >
+                  Save
+                </Button>
+              </div>
+              <p className="text-[10px] text-muted-foreground font-medium">
+                This link will be used for all "Join Telegram" buttons globally.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Security Settings */}
         <Card className="border border-border/40 bg-card shadow-sm rounded-2xl">
           <CardHeader className="border-b border-border/40 bg-muted/20 py-4 px-6">

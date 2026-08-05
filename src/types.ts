@@ -31,6 +31,7 @@ export interface TaskSettings {
   telegramBotToken: string;
   telegramPostInterval: number;
   telegramPostUnit: "minutes" | "hours";
+  telegramChannelUrl: string;
 }
 
 export interface Visitor {
