@@ -7,11 +7,11 @@ services:
       - "3000:3000"
     volumes:
       - ./backend:/app
-      - /app/node_modules
     env_file:
       - .env
     environment:
       - PORT=3000
+      - VITE_FRONTEND_API_URL=http://frontend:5173
 
   frontend:
     build:

@@ -15,7 +15,8 @@ CREATE TABLE IF NOT EXISTS videos (
     uploadedAt TEXT,
     releaseYear INTEGER,
     genres TEXT, -- JSON array
-    quality TEXT
+    quality TEXT,
+    telegramPosted INTEGER DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS visitors (
