@@ -6,13 +6,12 @@ WORKDIR /app
 # Install build dependencies
 RUN apk add --no-cache git
 
-# Copy go mod and sum files
+# Copy go mod file
 COPY go.mod ./
-# Note: go.sum will be generated if missing but usually good to have
-# RUN go mod download
 
-# Copy source code
+# Copy source code and tidy dependencies to generate go.sum
 COPY . .
+RUN go mod tidy
 
 # Build the application
 RUN go build -o main .

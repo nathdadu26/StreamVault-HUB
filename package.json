@@ -3,12 +3,15 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
+  "workspaces": [
+    "frontend"
+  ],
   "scripts": {
-    "dev": "cd frontend && npm run dev -- --port=3000 --host=0.0.0.0",
-    "build": "cd frontend && npm run build",
-    "preview": "cd frontend && npm run preview -- --port=3000 --host=0.0.0.0",
-    "start": "cd frontend && npm run preview -- --port=3000 --host=0.0.0.0",
-    "lint": "cd frontend && npm run lint"
+    "dev": "npm run dev -w frontend -- --port=3000 --host=0.0.0.0",
+    "build": "npm run build -w frontend",
+    "preview": "npm run preview -w frontend -- --port=3000 --host=0.0.0.0",
+    "start": "npm run preview -w frontend -- --port=3000 --host=0.0.0.0",
+    "lint": "npm run lint -w frontend"
   },
   "engines": {
     "node": ">=18.0.0"
