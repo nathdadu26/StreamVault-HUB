@@ -143,8 +143,23 @@ export function DownloadPage() {
                       }`}
                     >
                        <div className="flex items-center gap-4">
-                          <div className={`h-10 w-10 rounded-xl flex items-center justify-center text-white ${isTaskCompleted ? "bg-emerald-500" : "bg-amber-500"}`}>
-                             {isTaskCompleted ? <Icons.Check className="h-5 w-5" /> : <Icons.Zap className="h-5 w-5" />}
+                          <div className={`h-10 w-10 rounded-xl flex items-center justify-center text-white transition-all duration-300 ${
+                            isTaskCompleted 
+                            ? "bg-emerald-500" 
+                            : settings.downloadTaskUrl 
+                            ? `bg-purple-600 ${activeTaskId ? "animate-pulse" : ""}` 
+                            : "bg-slate-700"
+                          }`}>
+                             {isTaskCompleted ? (
+                               <div className="relative flex items-center justify-center">
+                                 <Icons.File className="h-5 w-5 text-white" />
+                                 <div className="absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full bg-white text-emerald-600 flex items-center justify-center shadow-sm">
+                                   <Icons.Check className="h-2 w-2 stroke-[3px]" />
+                                 </div>
+                               </div>
+                             ) : (
+                               <Icons.File className="h-5 w-5 text-white" />
+                             )}
                           </div>
                           <div className="space-y-0.5">
                              <h4 className="text-xs font-black uppercase tracking-tight text-foreground/90">Download Task</h4>

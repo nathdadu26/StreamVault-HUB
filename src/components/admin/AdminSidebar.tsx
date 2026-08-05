@@ -12,7 +12,7 @@ interface SidebarItem {
 
 const navItems: SidebarItem[] = [
   { label: "Overview", path: "/admin_dashboard", icon: Icons.LayoutDashboard },
-  { label: "All Files", path: "/admin_dashboard/files", icon: Icons.FileStack },
+  { label: "All Files", path: "/admin_dashboard/files", icon: Icons.FolderOpen },
   { label: "Visitors", path: "/admin_dashboard/visitors", icon: Icons.Users },
   { label: "Settings", path: "/admin_dashboard/settings", icon: Icons.Settings },
 ];

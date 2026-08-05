@@ -113,6 +113,8 @@ export function TaskUnlock() {
         {MOCK_TASKS.map((task, i) => {
           const taskUrl = i === 0 ? settings.task1Url : settings.task2Url;
           const isConfigured = !!taskUrl;
+          const isCompleted = completedTasks.includes(task.id);
+          const isActive = isConfigured && (activeTaskId === null || activeTaskId === task.id);
 
           return (
             <div key={task.id} className="space-y-2">
@@ -120,7 +122,7 @@ export function TaskUnlock() {
                 disabled={!isConfigured || (activeTaskId !== null && activeTaskId !== task.id)}
                 onClick={() => handleTaskClick(task.id, taskUrl, task.waitTimeSeconds)}
                 className={`w-full group relative flex items-center justify-between p-6 rounded-2xl border-2 transition-all duration-500 text-left ${
-                  completedTasks.includes(task.id)
+                  isCompleted
                     ? "bg-emerald-500/5 border-emerald-500/20 cursor-default"
                     : activeTaskId === task.id
                     ? "bg-card border-emerald-500 ring-4 ring-emerald-500/10"
@@ -131,16 +133,21 @@ export function TaskUnlock() {
               >
                 <div className="flex items-center gap-5">
                   <div className={`h-14 w-14 rounded-2xl flex items-center justify-center text-white transition-all duration-500 ${
-                    completedTasks.includes(task.id) 
+                    isCompleted 
                     ? "bg-emerald-500 shadow-lg shadow-emerald-500/20 scale-90" 
-                    : activeTaskId === task.id
-                    ? "bg-emerald-500 animate-pulse"
-                    : i % 2 === 0 ? "bg-indigo-500" : "bg-slate-700"
+                    : isActive
+                    ? `bg-purple-600 shadow-lg shadow-purple-600/20 ${activeTaskId === task.id ? "animate-pulse" : ""}`
+                    : "bg-slate-700"
                   }`}>
-                    {completedTasks.includes(task.id) ? (
-                      <Icons.Check className="h-6 w-6 stroke-[3px]" />
+                    {isCompleted ? (
+                      <div className="relative flex items-center justify-center">
+                        <Icons.File className="h-6 w-6 text-white" />
+                        <div className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full bg-white text-emerald-600 flex items-center justify-center shadow-sm">
+                          <Icons.Check className="h-2.5 w-2.5 stroke-[3px]" />
+                        </div>
+                      </div>
                     ) : (
-                      <span className="text-lg font-black">T{i+1}</span>
+                      <Icons.File className="h-6 w-6 text-white" />
                     )}
                   </div>
                   <div className="space-y-1">
