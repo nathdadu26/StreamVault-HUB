@@ -1,70 +1,50 @@
 import { useState, useEffect } from "react";
 
-const rawUrl = (import.meta as any).env?.VITE_KOYEB_PROCESSING_SERVER_URL;
-export const KOYEB_SERVER_URL = rawUrl ? rawUrl.replace(/\/$/, "") : "";
+const KOYEB_SERVER_URL = import.meta.env.VITE_KOYEB_PROCESSING_SERVER_URL || "http://localhost:3000";
 
 export function useBackendHealth() {
-  const [isOnline, setIsOnline] = useState<boolean>(false);
-  const [isChecking, setIsChecking] = useState<boolean>(true);
-
-  const checkHealth = async () => {
-    if (!KOYEB_SERVER_URL) {
-      console.error("[BackendHealth] VITE_KOYEB_PROCESSING_SERVER_URL is not defined in environment variables.");
-      setIsOnline(false);
-      setIsChecking(false);
-      return;
-    }
-
-    const healthUrl = `${KOYEB_SERVER_URL}/health`;
-    console.log(`[BackendHealth] Requesting: ${healthUrl}`);
-
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
-
-      const response = await fetch(healthUrl, {
-        method: "GET",
-        signal: controller.signal,
-        mode: 'cors',
-        headers: {
-          'Accept': 'application/json',
-        }
-      });
-
-      clearTimeout(timeoutId);
-
-      console.log(`[BackendHealth] HTTP Status Code: ${response.status}`);
-      
-      const body = await response.json().catch((e) => {
-        console.error("[BackendHealth] Failed to parse JSON body:", e);
-        return null;
-      }) as any;
-      
-      console.log("[BackendHealth] Response Body:", body);
-
-      if (response.status === 200 && body && body.status === "online") {
-        setIsOnline(true);
-      } else {
-        console.warn(`[BackendHealth] SYSTEM OFFLINE - Unexpected response. Status: ${response.status}, Body:`, body);
-        setIsOnline(false);
-      }
-    } catch (err: any) {
-      if (err.name === 'AbortError') {
-        console.error(`[BackendHealth] Request timed out after 10s: ${healthUrl}`);
-      } else {
-        console.error(`[BackendHealth] Network error / CORS failure:`, err.message || err);
-      }
-      setIsOnline(false);
-    } finally {
-      setIsChecking(false);
-    }
-  };
+  const [isOnline, setIsOnline] = useState<boolean | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    let isMounted = true;
+
+    const checkHealth = async () => {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+        const response = await fetch(`${KOYEB_SERVER_URL}/health`, {
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!isMounted) return;
+
+        if (response.ok) {
+          const data = await response.json() as any;
+          setIsOnline(data.status === "online");
+        } else {
+          setIsOnline(false);
+        }
+      } catch (error) {
+        if (!isMounted) return;
+        console.error("[BackendHealth] Health check failed:", error);
+        setIsOnline(false);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    };
+
     checkHealth();
-    const interval = setInterval(checkHealth, 30000); // Retry every 30 seconds
-    return () => clearInterval(interval);
+    const interval = setInterval(checkHealth, 30000); // Check every 30s
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, []);
 
-  return { isOnline, isChecking, checkHealth };
+  return { isOnline, isLoading };
 }

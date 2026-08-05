@@ -1,35 +1,27 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "./components/ThemeProvider";
-import { Layout } from "./components/Layout";
-import { TaskUnlock } from "./pages/TaskUnlock";
-import { VideoPlayer } from "./pages/VideoPlayer";
-import { AdminDashboard } from "./pages/admin/AdminDashboard";
-import { DownloadPage } from "./pages/DownloadPage";
+import Layout from "./components/Layout";
+
+// Pages
+// Note: I'll create these as stubs if they are missing
+import VideoPlayer from "./pages/VideoPlayer";
+import TaskUnlock from "./pages/TaskUnlock";
+import DownloadPage from "./pages/DownloadPage";
+import AdminDashboard from "./pages/admin/AdminDashboard";
 
 export default function App() {
   return (
-    <ThemeProvider defaultTheme="dark" storageKey="stream-vault-theme">
-      <BrowserRouter>
+    <ThemeProvider defaultTheme="light" storageKey="atoz-theme">
+      <Router>
         <Routes>
-          <Route path="/admin_dashboard/*" element={<AdminDashboard />} />
-          <Route path="/*" element={
-            <Layout>
-              <Routes>
-                <Route path="/" element={<TaskUnlock />} />
-                <Route path="/ad/:slug" element={<TaskUnlock />} />
-                <Route path="/s/:slug" element={<VideoPlayer />} />
-                <Route path="/dl/:slug" element={<DownloadPage />} />
-                <Route path="/d/:slug" element={<DownloadPage />} />
-              </Routes>
-            </Layout>
-          } />
+          <Route path="/" element={<Layout />}>
+            <Route path="video/:slug" element={<VideoPlayer />} />
+            <Route path="unlock/:slug" element={<TaskUnlock />} />
+            <Route path="download/:slug" element={<DownloadPage />} />
+          </Route>
+          <Route path="/admin/*" element={<AdminDashboard />} />
         </Routes>
-      </BrowserRouter>
+      </Router>
     </ThemeProvider>
   );
 }

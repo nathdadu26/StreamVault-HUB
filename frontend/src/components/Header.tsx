@@ -1,47 +1,32 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
-import { Icons } from "@/src/components/Icons";
-import { useTheme } from "@/src/components/ThemeProvider";
-import { Switch } from "@/components/ui/switch";
 import { Link } from "react-router-dom";
+import { useTheme } from "./ThemeProvider";
+import { Sun, Moon, Play } from "lucide-react";
 
-export function Header() {
+export default function Header() {
   const { theme, setTheme } = useTheme();
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-xl">
-      <div className="container mx-auto flex h-16 items-center justify-between px-6">
-        <Link to="/" className="flex items-center gap-2 group">
-          <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 group-hover:scale-110 transition-transform">
-             <Icons.ShieldCheck className="h-5 w-5" />
+    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+        <Link to="/" className="flex items-center gap-2">
+          <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+            <Play className="w-5 h-5 text-primary-foreground fill-current" />
           </div>
-          <span className="text-xl font-black tracking-tight text-foreground/90">
-            StreamVault
-          </span>
-          <span className="bg-emerald-500 px-2.5 py-0.5 rounded-lg text-white text-[10px] font-black uppercase tracking-widest shadow-lg shadow-emerald-500/20">
-            HUB
-          </span>
+          <span className="font-bold text-xl tracking-tight">StreamVault HUB</span>
         </Link>
 
-        <div className="flex items-center gap-6">
-          <div className="flex items-center gap-3 p-1 rounded-xl bg-muted/30 border border-border/40">
-            <button 
-              onClick={() => setTheme("light")}
-              className={`p-1.5 rounded-lg transition-all ${theme === "light" ? "bg-background shadow-sm text-emerald-500" : "text-muted-foreground hover:text-foreground"}`}
-            >
-               <Icons.Sun className="h-3.5 w-3.5" />
-            </button>
-            <button 
-              onClick={() => setTheme("dark")}
-              className={`p-1.5 rounded-lg transition-all ${theme === "dark" ? "bg-background shadow-sm text-emerald-500" : "text-muted-foreground hover:text-foreground"}`}
-            >
-               <Icons.Moon className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        </div>
+        <nav className="hidden md:flex items-center gap-6">
+          <Link to="/" className="text-sm font-medium hover:text-primary transition-colors">Home</Link>
+          <Link to="/admin" className="text-sm font-medium hover:text-primary transition-colors">Dashboard</Link>
+        </nav>
+
+        <button
+          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+          className="p-2 rounded-md hover:bg-muted transition-colors"
+          aria-label="Toggle theme"
+        >
+          {theme === "dark" ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+        </button>
       </div>
     </header>
   );

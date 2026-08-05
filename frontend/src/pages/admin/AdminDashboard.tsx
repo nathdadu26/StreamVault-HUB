@@ -1,81 +1,31 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
+import { Link, Routes, Route } from "react-router-dom";
 
-import { Routes, Route, useLocation } from "react-router-dom";
-import { useState, useEffect } from "react";
-import { Icons } from "@/src/components/Icons";
-import { Overview } from "./Overview";
-import { FilesManager } from "./FilesManager";
-import { Bots } from "./Bots";
-import { Settings } from "./Settings";
-import { AdminSidebar } from "@/src/components/admin/AdminSidebar";
-import { AdminHeader } from "@/src/components/admin/AdminHeader";
-
-export function AdminDashboard() {
-  const location = useLocation();
-  const [sidebarOpen, setSidebarOpen] = useState(() => {
-    const saved = localStorage.getItem("sidebar-collapsed");
-    return saved ? JSON.parse(saved) : true;
-  });
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 1024);
-      if (window.innerWidth < 1024) {
-        setSidebarOpen(false);
-      }
-    };
-    checkMobile();
-    window.addEventListener("resize", checkMobile);
-    return () => window.removeEventListener("resize", checkMobile);
-  }, []);
-
-  const toggleSidebar = () => {
-    const newState = !sidebarOpen;
-    setSidebarOpen(newState);
-    if (!isMobile) {
-      localStorage.setItem("sidebar-collapsed", JSON.stringify(newState));
-    }
-  };
-
-  const getPageTitle = () => {
-    if (location.pathname === "/admin_dashboard") return "Dashboard Overview";
-    if (location.pathname === "/admin_dashboard/files") return "Media Library";
-    if (location.pathname === "/admin_dashboard/bots") return "Bot Management";
-    if (location.pathname === "/admin_dashboard/settings") return "System Settings";
-    return "Admin Panel";
-  };
-
+export default function AdminDashboard() {
   return (
-    <div className="flex min-h-screen bg-background font-sans selection:bg-success/30">
-      <AdminSidebar 
-        isOpen={sidebarOpen} 
-        setIsOpen={setSidebarOpen} 
-        isMobile={isMobile}
-        toggleSidebar={toggleSidebar}
-      />
+    <div className="flex min-h-screen bg-muted/20">
+      <aside className="w-64 border-r bg-background hidden lg:block">
+        <div className="p-6">
+          <h2 className="font-bold text-lg">Admin Panel</h2>
+        </div>
+        <nav className="px-4 space-y-2">
+          <Link to="/admin" className="block px-4 py-2 rounded-md hover:bg-muted font-medium">Overview</Link>
+          <Link to="/admin/files" className="block px-4 py-2 rounded-md hover:bg-muted font-medium">Manage Files</Link>
+          <Link to="/admin/settings" className="block px-4 py-2 rounded-md hover:bg-muted font-medium">Settings</Link>
+        </nav>
+      </aside>
       
-      <div className="flex-1 flex flex-col min-w-0">
-        <AdminHeader 
-          title={getPageTitle()} 
-          onMenuClick={() => setSidebarOpen(true)}
-          isMobile={isMobile}
-        />
-        
-        <main className="flex-1 p-4 md:p-8 overflow-x-hidden">
-          <div className="mx-auto max-w-7xl animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <Routes>
-              <Route path="/" element={<Overview />} />
-              <Route path="/files" element={<FilesManager />} />
-              <Route path="/bots" element={<Bots />} />
-              <Route path="/settings" element={<Settings />} />
-            </Routes>
-          </div>
-        </main>
-      </div>
+      <main className="flex-1">
+        <header className="h-16 border-b bg-background flex items-center px-8">
+           <h1 className="font-semibold">Dashboard</h1>
+        </header>
+        <div className="p-8">
+          <Routes>
+            <Route path="/" element={<div>Welcome to Admin Overview</div>} />
+            <Route path="/files" element={<div>File Management Section</div>} />
+            <Route path="/settings" element={<div>Settings Configuration</div>} />
+          </Routes>
+        </div>
+      </main>
     </div>
   );
 }
