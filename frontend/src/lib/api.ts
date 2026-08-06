@@ -357,26 +357,30 @@ export async function getVideoBySlug(rawSlug: string): Promise<Video | null> {
   return null;
 }
 
-export function updateFileThumbnail(id: string, newThumbnailUrl: string, title?: string): Video[] {
+export async function updateFileThumbnail(id: string, newThumbnailUrl: string, title?: string): Promise<Video[]> {
   const files = getStoredFiles();
   const updated = files.map((f) => {
-    if (f.id === id) {
+    if (f && f.id === id) {
       return {
         ...f,
-        thumbnailUrl: newThumbnailUrl,
-        ...(title ? { title } : {}),
+        thumbnailUrl: newThumbnailUrl || f.thumbnailUrl || "",
+        title: title !== undefined ? title : (f.title || ""),
       };
     }
     return f;
   });
   saveStoredFiles(updated);
   
-  // Also try to push to Cloudflare D1 Function if available
-  fetch("/api/videos", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id, thumbnailUrl: newThumbnailUrl, title }),
-  }).catch(() => {});
+  // Push to Cloudflare D1 Function API
+  try {
+    await fetch("/api/videos", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, thumbnailUrl: newThumbnailUrl, title }),
+    });
+  } catch (err) {
+    console.error("[updateFileThumbnail] Failed to sync with Cloudflare D1 API:", err);
+  }
 
   return updated;
 }

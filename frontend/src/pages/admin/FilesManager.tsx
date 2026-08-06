@@ -96,11 +96,23 @@ export function FilesManager() {
     }
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (!editingVideo) return;
-    updateFileThumbnail(editingVideo.id, editingThumbnailUrl, editingTitle);
-    refreshFiles();
-    setEditingVideo(null);
+    try {
+      const targetId = editingVideo.id || "";
+      if (!targetId) {
+        setEditingVideo(null);
+        return;
+      }
+      await updateFileThumbnail(targetId, editingThumbnailUrl || "", editingTitle || "");
+      triggerToast("Changes saved successfully to D1.", "success");
+      refreshFiles();
+    } catch (err: any) {
+      console.error("[Edit] Error saving video edits:", err);
+      triggerToast(`Failed to save changes: ${err.message || "Unknown error"}`, "error");
+    } finally {
+      setEditingVideo(null);
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -391,9 +403,12 @@ export function FilesManager() {
                             variant="outline"
                             size="sm"
                             onClick={() => {
+                              if (!file) return;
+                              const safeTitle = file.title || "";
+                              const safeThumbUrl = file.thumbnailUrl || (Array.isArray(file.thumbnails) ? file.thumbnails[0] : "") || "";
                               setEditingVideo(file);
-                              setEditingTitle(file.title);
-                              setEditingThumbnailUrl(file.thumbnailUrl);
+                              setEditingTitle(safeTitle);
+                              setEditingThumbnailUrl(safeThumbUrl);
                             }}
                             className="h-9 px-3 rounded-lg text-xs font-bold border-border/60 hover:bg-muted"
                           >
@@ -426,48 +441,73 @@ export function FilesManager() {
               <DialogTitle className="text-xl font-black tracking-tight">Edit Media & Select Active Thumbnail</DialogTitle>
             </DialogHeader>
 
-            {editingVideo && (
-              <div className="space-y-6">
-                <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Display Title</Label>
-                  <Input
-                    value={editingTitle}
-                    onChange={(e) => setEditingTitle(e.target.value)}
-                    className="h-11 bg-muted/20 border-border/40 rounded-xl font-bold text-sm"
-                  />
-                </div>
+            {editingVideo && (() => {
+              let thumbsList: string[] = [];
+              if (Array.isArray(editingVideo.thumbnails)) {
+                thumbsList = editingVideo.thumbnails.filter((t) => typeof t === "string" && t.trim() !== "");
+              } else if (typeof editingVideo.thumbnails === "string") {
+                try {
+                  const parsed = JSON.parse(editingVideo.thumbnails);
+                  if (Array.isArray(parsed)) {
+                    thumbsList = parsed.filter((t: any) => typeof t === "string" && t.trim() !== "");
+                  }
+                } catch {
+                  thumbsList = [];
+                }
+              }
 
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">
-                      Extracted Thumbnails (Select 1 of 5)
-                    </Label>
-                    <span className="text-[10px] font-bold text-emerald-500">Stored in R2</span>
+              if (thumbsList.length === 0 && editingThumbnailUrl) {
+                thumbsList = [editingThumbnailUrl];
+              }
+
+              return (
+                <div className="space-y-6">
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Display Title</Label>
+                    <Input
+                      value={editingTitle}
+                      onChange={(e) => setEditingTitle(e.target.value)}
+                      placeholder="Video title"
+                      className="h-11 bg-muted/20 border-border/40 rounded-xl font-bold text-sm"
+                    />
                   </div>
 
-                  <div className="grid grid-cols-5 gap-3">
-                    {editingVideo.thumbnails.map((thumb, idx) => (
-                      <div
-                        key={idx}
-                        onClick={() => setEditingThumbnailUrl(thumb)}
-                        className={`aspect-video rounded-xl overflow-hidden cursor-pointer border-4 transition-all duration-300 relative ${
-                          editingThumbnailUrl === thumb
-                            ? "border-emerald-500 scale-105 shadow-xl shadow-emerald-500/20"
-                            : "border-transparent opacity-60 hover:opacity-100"
-                        }`}
-                      >
-                        <img src={thumb} alt={`Thumb ${idx + 1}`} className="w-full h-full object-cover" />
-                        {editingThumbnailUrl === thumb && (
-                          <div className="absolute top-1 right-1 h-5 w-5 rounded-full bg-emerald-500 text-white flex items-center justify-center">
-                            <Icons.Check className="h-3 w-3 stroke-[3px]" />
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">
+                        Extracted Thumbnails ({thumbsList.length > 0 ? `Select 1 of ${thumbsList.length}` : "0 available"})
+                      </Label>
+                      <span className="text-[10px] font-bold text-emerald-500">Stored in R2</span>
+                    </div>
+
+                    {thumbsList.length > 0 ? (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                        {thumbsList.map((thumb, idx) => (
+                          <div
+                            key={idx}
+                            onClick={() => setEditingThumbnailUrl(thumb)}
+                            className={`aspect-video rounded-xl overflow-hidden cursor-pointer border-4 transition-all duration-300 relative bg-muted ${
+                              editingThumbnailUrl === thumb
+                                ? "border-emerald-500 scale-105 shadow-xl shadow-emerald-500/20"
+                                : "border-transparent opacity-60 hover:opacity-100"
+                            }`}
+                          >
+                            <img src={thumb} alt={`Thumb ${idx + 1}`} className="w-full h-full object-cover" />
+                            {editingThumbnailUrl === thumb && (
+                              <div className="absolute top-1 right-1 h-5 w-5 rounded-full bg-emerald-500 text-white flex items-center justify-center">
+                                <Icons.Check className="h-3 w-3 stroke-[3px]" />
+                              </div>
+                            )}
                           </div>
-                        )}
+                        ))}
                       </div>
-                    ))}
+                    ) : (
+                      <p className="text-xs text-muted-foreground italic">No thumbnail options available.</p>
+                    )}
                   </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
 
           <div className="bg-muted/30 p-6 flex items-center justify-end gap-3 border-t border-border/40">
