@@ -1,6 +1,8 @@
 import { Video, Visitor, TaskSettings } from "../types";
 import { KOYEB_SERVER_URL } from "../hooks/useBackendHealth";
 
+export { KOYEB_SERVER_URL };
+
 const STORAGE_FILES_KEY = "streamvault_d1_files";
 const STORAGE_VISITORS_KEY = "streamvault_d1_visitors";
 const STORAGE_SETTINGS_KEY = "streamvault_d1_settings";

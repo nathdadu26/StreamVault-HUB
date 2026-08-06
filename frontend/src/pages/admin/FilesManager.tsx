@@ -15,13 +15,11 @@ import {
 import { Video } from "../../types";
 import { 
   getStoredFiles, 
-  uploadAndProcessVideo, 
-  retryProcessingVideo,
   updateFileThumbnail, 
   deleteFile, 
-  UploadQueueItem, 
-  ProcessingStep 
 } from "../../lib/api";
+import { StoredUploadItem } from "../../lib/uploadQueueDb";
+import { uploadManager } from "../../lib/uploadManager";
 import { PlyrPlayer } from "../../components/PlyrPlayer";
 import { useBackendHealth } from "../../hooks/useBackendHealth";
 
@@ -29,7 +27,7 @@ export function FilesManager() {
   const [files, setFiles] = useState<Video[]>([]);
   const [search, setSearch] = useState("");
   const [isDragging, setIsDragging] = useState(false);
-  const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([]);
+  const [uploadQueue, setUploadQueue] = useState<StoredUploadItem[]>([]);
   const [editingVideo, setEditingVideo] = useState<Video | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
   const [editingThumbnailUrl, setEditingThumbnailUrl] = useState("");
@@ -41,6 +39,13 @@ export function FilesManager() {
 
   useEffect(() => {
     refreshFiles();
+    uploadManager.setOnFilesChangedCallback(refreshFiles);
+    const unsubscribe = uploadManager.subscribe((queue) => {
+      setUploadQueue(queue);
+    });
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   const refreshFiles = () => {
@@ -59,79 +64,7 @@ export function FilesManager() {
 
   const handleFilesSelected = (fileList: FileList | File[]) => {
     if (!isOnline) return;
-    const validFiles = Array.from(fileList).filter((f) => f.type.startsWith("video/") || f.name.match(/\.(mp4|mov|mkv|avi|webm)$/i));
-    if (validFiles.length === 0) return;
-
-    const newQueueItems: UploadQueueItem[] = validFiles.map((file) => ({
-      id: `queue_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-      file,
-      name: file.name,
-      sizeFormatted: (file.size / (1024 * 1024)).toFixed(1) + " MB",
-      progress: 0,
-      step: "Uploading to Bunny Stream",
-    }));
-
-    setUploadQueue((prev) => [...prev, ...newQueueItems]);
-
-    // Process each file in queue sequentially
-    newQueueItems.forEach((item) => {
-      processQueueItem(item);
-    });
-  };
-
-  const processQueueItem = async (item: UploadQueueItem) => {
-    try {
-      const resultVideo = await uploadAndProcessVideo(item.file, (progress: number, step: ProcessingStep, jobId?: string) => {
-        setUploadQueue((prev) =>
-          prev.map((q) => (q.id === item.id ? { ...q, progress, step, ...(jobId ? { jobId } : {}) } : q))
-        );
-      });
-
-      setUploadQueue((prev) =>
-        prev.map((q) => (q.id === item.id ? { ...q, progress: 100, step: "Completed", completedVideo: resultVideo } : q))
-      );
-
-      refreshFiles();
-    } catch (err: any) {
-      const isProcessingFailed = err.message && err.message.startsWith("Processing Failed");
-      setUploadQueue((prev) =>
-        prev.map((q) => (q.id === item.id ? { ...q, step: isProcessingFailed ? "Processing Failed" : "Failed", error: err.message || "Upload failed" } : q))
-      );
-    }
-  };
-
-  const retryQueueItem = async (item: UploadQueueItem) => {
-    setUploadQueue((prev) =>
-      prev.map((q) => (q.id === item.id ? { ...q, error: undefined, step: "Waiting for Bunny Stream Transcoding", progress: 25 } : q))
-    );
-
-    try {
-      let resultVideo: Video;
-      if (item.jobId) {
-        resultVideo = await retryProcessingVideo(item.jobId, item.file, (progress: number, step: ProcessingStep, jobId?: string) => {
-          setUploadQueue((prev) =>
-            prev.map((q) => (q.id === item.id ? { ...q, progress, step, ...(jobId ? { jobId } : {}) } : q))
-          );
-        });
-      } else {
-        resultVideo = await uploadAndProcessVideo(item.file, (progress: number, step: ProcessingStep, jobId?: string) => {
-          setUploadQueue((prev) =>
-            prev.map((q) => (q.id === item.id ? { ...q, progress, step, ...(jobId ? { jobId } : {}) } : q))
-          );
-        });
-      }
-
-      setUploadQueue((prev) =>
-        prev.map((q) => (q.id === item.id ? { ...q, progress: 100, step: "Completed", completedVideo: resultVideo } : q))
-      );
-
-      refreshFiles();
-    } catch (err: any) {
-      const isProcessingFailed = err.message && err.message.startsWith("Processing Failed");
-      setUploadQueue((prev) =>
-        prev.map((q) => (q.id === item.id ? { ...q, step: isProcessingFailed ? "Processing Failed" : "Failed", error: err.message || "Processing failed" } : q))
-      );
-    }
+    uploadManager.addFiles(fileList);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -252,16 +185,28 @@ export function FilesManager() {
           {/* Upload Queue Section */}
           {uploadQueue.length > 0 && (
             <div className="space-y-4 pt-2">
-              <div className="flex items-center justify-between">
-                <h4 className="text-xs font-black uppercase tracking-widest text-foreground/80">Upload Queue ({uploadQueue.length})</h4>
-                <Button 
-                  variant="ghost" 
-                  size="sm"
-                  onClick={() => setUploadQueue([])}
-                  className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground h-7"
-                >
-                  Clear Finished
-                </Button>
+              <div className="flex items-center justify-between gap-4">
+                <h4 className="text-xs font-black uppercase tracking-widest text-foreground/80">
+                  Upload Queue ({uploadQueue.length})
+                </h4>
+                <div className="flex items-center gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => uploadManager.cancelAllUploads()}
+                    className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground h-7 px-3 rounded-lg border-border/60"
+                  >
+                    Cancel Uploads
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => uploadManager.clearFinishedUploads()}
+                    className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground h-7 px-3 rounded-lg border-border/60"
+                  >
+                    Clear Finished
+                  </Button>
+                </div>
               </div>
               <div className="space-y-3">
                 {uploadQueue.map((item) => {
@@ -271,10 +216,10 @@ export function FilesManager() {
                   if (item.step === "Completed") {
                     badgeLabel = "Ready";
                     badgeBg = "bg-emerald-600";
-                  } else if (item.step === "Failed" || item.step === "Processing Failed") {
+                  } else if (item.step === "Failed") {
                     badgeLabel = "Failed";
                     badgeBg = "bg-rose-600";
-                  } else if (item.step === "Uploading to Bunny Stream") {
+                  } else if (item.step === "Uploading to Bunny Stream" && item.progress < 100) {
                     badgeLabel = "Uploading";
                     badgeBg = "bg-blue-600";
                   }
@@ -295,31 +240,25 @@ export function FilesManager() {
                               {item.sizeFormatted}
                             </p>
                             {item.error && (
-                              <p className="text-[10px] text-rose-500 font-medium truncate mt-0.5">
+                              <p className="text-[10px] text-amber-500/90 font-medium truncate mt-0.5">
                                 {item.error}
                               </p>
                             )}
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-2 shrink-0">
-                          {(item.step === "Failed" || item.step === "Processing Failed") && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => retryQueueItem(item)}
-                              className="h-6 px-2.5 text-[10px] font-bold border-rose-500/30 text-rose-500 hover:bg-rose-500/10 rounded-full"
-                            >
-                              Retry
-                            </Button>
-                          )}
+                        <div className="flex items-center gap-2.5 shrink-0">
                           <span className={`h-6 px-3 rounded-full text-[10px] font-bold text-white flex items-center justify-center shadow-none border-none shrink-0 ${badgeBg}`}>
                             {badgeLabel}
                           </span>
+                          <Icons.X
+                            className="h-4 w-4 text-muted-foreground hover:text-foreground cursor-pointer transition-colors shrink-0"
+                            onClick={() => uploadManager.cancelUpload(item.id)}
+                          />
                         </div>
                       </div>
 
-                      {item.step === "Uploading to Bunny Stream" && (
+                      {item.step === "Uploading to Bunny Stream" && item.progress < 100 && (
                         <Progress
                           value={item.progress}
                           className="h-1.5 bg-blue-500/10"
