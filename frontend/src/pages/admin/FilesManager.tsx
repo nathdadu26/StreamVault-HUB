@@ -67,7 +67,7 @@ export function FilesManager() {
       name: file.name,
       sizeFormatted: (file.size / (1024 * 1024)).toFixed(1) + " MB",
       progress: 0,
-      step: "Uploading to Koyeb",
+      step: "Uploading to Bunny Stream",
     }));
 
     setUploadQueue((prev) => [...prev, ...newQueueItems]);
@@ -163,8 +163,8 @@ export function FilesManager() {
                 Server Ready
               </Badge>
             ) : (
-              <Badge variant="destructive" className="text-xs font-black uppercase tracking-wider px-3">
-                SYSTEM OFFLINE
+              <Badge variant="destructive" className="text-xs font-bold">
+                Server Offline
               </Badge>
             )}
           </div>
@@ -202,7 +202,7 @@ export function FilesManager() {
                 {isOnline ? (
                   <>Drag & Drop video here or <span className="text-emerald-500 underline underline-offset-4">Click to Browse</span></>
                 ) : (
-                  <span className="text-muted-foreground uppercase tracking-widest font-black">SYSTEM OFFLINE</span>
+                  <span className="text-muted-foreground">Upload Server Disconnected</span>
                 )}
               </h3>
               <p className="text-xs text-muted-foreground font-medium">

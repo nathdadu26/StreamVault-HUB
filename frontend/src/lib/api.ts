@@ -167,16 +167,12 @@ export function saveStoredSettings(settings: TaskSettings): void {
 // REMOVED: Frontend must never process videos. Logic moved to Koyeb Backend.
 
 export type ProcessingStep = 
-  | "Uploading to Koyeb"
-  | "Receiving file"
-  | "Renaming file"
-  | "Detecting format"
-  | "Converting to MP4"
-  | "Generating thumbnails"
-  | "Uploading video to Cloudflare R2"
-  | "Uploading thumbnails to Cloudflare R2"
-  | "Returning upload result"
-  | "Saving metadata to Cloudflare D1"
+  | "Uploading to Bunny Stream"
+  | "Waiting for Bunny Stream Transcoding"
+  | "Downloading ZIP Package"
+  | "Extracting Files"
+  | "Uploading Files to Cloudflare R2"
+  | "Saving Metadata to Cloudflare D1"
   | "Completed"
   | "Failed";
 
@@ -195,7 +191,7 @@ export async function uploadAndProcessVideo(
   file: File,
   onProgress: (progress: number, step: ProcessingStep) => void
 ): Promise<Video> {
-  onProgress(5, "Uploading to Koyeb");
+  onProgress(5, "Uploading to Bunny Stream");
   
   const existing = getStoredFiles();
   const slug = generateUniqueSlug(existing);
@@ -204,7 +200,6 @@ export async function uploadAndProcessVideo(
   formData.append("slug", slug);
 
   try {
-    // Stage 1: Uploading to Koyeb
     const res = await fetch(`${KOYEB_SERVER_URL}/upload`, {
       method: "POST",
       body: formData,
@@ -217,42 +212,28 @@ export async function uploadAndProcessVideo(
 
     const { jobId } = await res.json() as { jobId: string };
     
-    // Polling Stage 2-9
     let jobCompleted = false;
     let videoData: any = null;
-    const startTime = Date.now();
-    const timeout = 30 * 60 * 1000; // 30 minutes
 
     while (!jobCompleted) {
-      if (Date.now() - startTime > timeout) {
-        throw new Error("Upload processing timed out after 30 minutes");
+      const statusRes = await fetch(`${KOYEB_SERVER_URL}/upload/status/${jobId}`);
+      if (!statusRes.ok) throw new Error("Failed to fetch job status");
+      
+      const job = await statusRes.json() as any;
+      
+      if (job.error) {
+        throw new Error(job.error);
       }
 
-      try {
-        const statusRes = await fetch(`${KOYEB_SERVER_URL}/upload/status/${jobId}`);
-        if (!statusRes.ok) throw new Error("Failed to fetch job status from processing server");
-        
-        const job = await statusRes.json() as any;
-        
-        if (job.error) {
-          throw new Error(job.error);
-        }
+      if (job.stage) {
+        onProgress(job.progress || 50, job.stage as ProcessingStep);
+      }
 
-        if (job.stage) {
-          onProgress(job.progress || 50, job.stage as ProcessingStep);
-        }
-
-        if (job.completed) {
-          jobCompleted = true;
-          videoData = job.result;
-        } else {
-          // Wait 2 seconds before polling again
-          await new Promise(resolve => setTimeout(resolve, 2000));
-        }
-      } catch (pollErr) {
-        console.error("Polling error:", pollErr);
-        // Retry polling unless it's a persistent error
-        await new Promise(resolve => setTimeout(resolve, 5000));
+      if (job.completed) {
+        jobCompleted = true;
+        videoData = job.result;
+      } else {
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
     }
 
@@ -260,20 +241,26 @@ export async function uploadAndProcessVideo(
       throw new Error("Job completed but no video data returned");
     }
 
-    // Stage 10: Saving metadata to Cloudflare D1
-    onProgress(95, "Saving metadata to Cloudflare D1");
+    // Saving Metadata to Cloudflare D1
+    onProgress(95, "Saving Metadata to Cloudflare D1");
     
     const videoObject: Video = {
       ...videoData,
       id: videoData.id || `vid_${Date.now()}`,
-      slug: slug,
+      slug: videoData.slug || slug,
+      title: videoData.title || file.name,
+      fileSize: videoData.fileSize || `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
       views: 0,
       likes: 0,
       dislikes: 0,
       duration: videoData.duration || "00:00",
       releaseYear: new Date().getFullYear(),
       genres: ["MP4", "HD"],
-      quality: "1080p",
+      quality: videoData.quality || "1080p",
+      thumbnailUrl: videoData.thumbnailUrl,
+      thumbnails: videoData.thumbnails || (videoData.thumbnailUrl ? [videoData.thumbnailUrl] : []),
+      videoUrl: videoData.videoUrl,
+      uploadedAt: videoData.uploadedAt || videoData.created_at || new Date().toISOString(),
     };
 
     // Persist locally
@@ -286,7 +273,6 @@ export async function uploadAndProcessVideo(
       body: JSON.stringify(videoObject),
     }).catch(() => {});
 
-    // Stage 11: Completed
     onProgress(100, "Completed");
     return videoObject;
 
