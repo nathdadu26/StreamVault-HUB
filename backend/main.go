@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -40,12 +41,19 @@ type Config struct {
 var cfg Config
 
 type JobStatus struct {
-	ID        string        `json:"id"`
-	Stage     string        `json:"stage"`
-	Progress  int           `json:"progress"`
-	Error     string        `json:"error,omitempty"`
-	Result    *UploadResult `json:"result,omitempty"`
-	Completed bool          `json:"completed"`
+	ID               string        `json:"id"`
+	Stage            string        `json:"stage"`
+	Progress         int           `json:"progress"`
+	Error            string        `json:"error,omitempty"`
+	Result           *UploadResult `json:"result,omitempty"`
+	Completed        bool          `json:"completed"`
+	BunnyVideoID     string        `json:"bunnyVideoId,omitempty"`
+	BunnyUploaded    bool          `json:"bunnyUploaded"`
+	ProcessingFailed bool          `json:"processingFailed"`
+	FailedStep       string        `json:"failedStep,omitempty"`
+	OriginalFilename string        `json:"originalFilename,omitempty"`
+	RenamedFilename  string        `json:"renamedFilename,omitempty"`
+	Timestamp        int64         `json:"timestamp,omitempty"`
 }
 
 type UploadResult struct {
@@ -69,7 +77,67 @@ type UploadResult struct {
 	Views        int               `json:"views"`
 }
 
-var jobs = make(map[string]*JobStatus)
+var (
+	jobsMutex sync.RWMutex
+	jobs      = make(map[string]*JobStatus)
+)
+
+func setJob(id string, job *JobStatus) {
+	jobsMutex.Lock()
+	defer jobsMutex.Unlock()
+	jobs[id] = job
+}
+
+func getJob(id string) (*JobStatus, bool) {
+	jobsMutex.RLock()
+	defer jobsMutex.RUnlock()
+	job, ok := jobs[id]
+	return job, ok
+}
+
+func updateJob(id, stage string, progress int, err error) {
+	jobsMutex.Lock()
+	defer jobsMutex.Unlock()
+	if job, ok := jobs[id]; ok {
+		job.Stage = stage
+		job.Progress = progress
+		if err != nil {
+			job.Error = err.Error()
+			if !job.BunnyUploaded {
+				job.Completed = true
+			}
+			log.Printf("[Job %s] Error: %v", id, err)
+		} else {
+			log.Printf("[Job %s] Stage: %s (%d%%)", id, stage, progress)
+		}
+	}
+}
+
+func markProcessingFailed(id, failedStep string, err error) {
+	jobsMutex.Lock()
+	defer jobsMutex.Unlock()
+	if job, ok := jobs[id]; ok {
+		job.ProcessingFailed = true
+		job.FailedStep = failedStep
+		job.Stage = "Processing Failed"
+		errMsg := fmt.Sprintf("Processing Failed: %s", failedStep)
+		if err != nil {
+			errMsg = fmt.Sprintf("Processing Failed: %s (%v)", failedStep, err)
+		}
+		job.Error = errMsg
+		log.Printf("[Job %s] Processing Failed at step '%s': %v", id, failedStep, err)
+	}
+}
+
+func generateRandomSlug(n int) string {
+	const letters = "abcdefghijklmnopqrstuvwxyz0123456789_"
+	b := make([]byte, n)
+	_, _ = rand.Read(b)
+	for i := 0; i < n; i++ {
+		b[i] = letters[int(b[i])%len(letters)]
+	}
+	return string(b)
+}
 
 func main() {
 	cfg = Config{
@@ -106,13 +174,14 @@ func main() {
 	r.POST("/upload", handleUpload)
 	r.GET("/upload/status/:id", func(c *gin.Context) {
 		id := c.Param("id")
-		job, ok := jobs[id]
+		job, ok := getJob(id)
 		if !ok {
 			c.JSON(404, gin.H{"error": "Job not found"})
 			return
 		}
 		c.JSON(200, job)
 	})
+	r.POST("/upload/retry/:id", handleRetryProcessing)
 
 	// Start Telegram Worker
 	go startTelegramWorker()
@@ -122,30 +191,6 @@ func main() {
 		port = "3000"
 	}
 	r.Run(":" + port)
-}
-
-func updateJob(id, stage string, progress int, err error) {
-	if job, ok := jobs[id]; ok {
-		job.Stage = stage
-		job.Progress = progress
-		if err != nil {
-			job.Error = err.Error()
-			job.Completed = true
-			log.Printf("[Job %s] Error: %v", id, err)
-		} else {
-			log.Printf("[Job %s] Stage: %s (%d%%)", id, stage, progress)
-		}
-	}
-}
-
-func generateRandomSlug(n int) string {
-	const letters = "abcdefghijklmnopqrstuvwxyz0123456789_"
-	b := make([]byte, n)
-	_, _ = rand.Read(b)
-	for i := 0; i < n; i++ {
-		b[i] = letters[int(b[i])%len(letters)]
-	}
-	return string(b)
 }
 
 func handleUpload(c *gin.Context) {
@@ -164,11 +209,15 @@ func handleUpload(c *gin.Context) {
 	renamedFilename := fmt.Sprintf("TG-@atoz_links-VID-%d%s", timestamp, ext)
 	jobID := fmt.Sprintf("%d-%s", timestamp, strings.ReplaceAll(file.Filename, " ", "_"))
 
-	jobs[jobID] = &JobStatus{
-		ID:       jobID,
-		Stage:    "Uploading to Bunny Stream",
-		Progress: 5,
+	job := &JobStatus{
+		ID:               jobID,
+		Stage:            "Uploading to Bunny Stream",
+		Progress:         5,
+		OriginalFilename: file.Filename,
+		RenamedFilename:  renamedFilename,
+		Timestamp:        timestamp,
 	}
+	setJob(jobID, job)
 
 	if err := os.MkdirAll("uploads", 0755); err != nil {
 		updateJob(jobID, "Failed to create uploads dir", 0, err)
@@ -183,10 +232,35 @@ func handleUpload(c *gin.Context) {
 		return
 	}
 
-	// Move to Bunny Stream background pipeline
 	go processBunnyWorkflow(jobID, tempPath, file.Filename, renamedFilename, timestamp)
 
 	c.JSON(200, gin.H{"jobId": jobID})
+}
+
+func handleRetryProcessing(c *gin.Context) {
+	id := c.Param("id")
+	job, ok := getJob(id)
+	if !ok {
+		c.JSON(404, gin.H{"error": "Job not found"})
+		return
+	}
+
+	if job.BunnyVideoID == "" || !job.BunnyUploaded {
+		c.JSON(400, gin.H{"error": "Video was not successfully uploaded to Bunny Stream yet"})
+		return
+	}
+
+	jobsMutex.Lock()
+	job.ProcessingFailed = false
+	job.Error = ""
+	job.FailedStep = ""
+	job.Stage = "Waiting for Bunny Stream Transcoding"
+	job.Progress = 25
+	jobsMutex.Unlock()
+
+	go runPostUploadProcessingWithRetry(job.ID, job.BunnyVideoID, job.OriginalFilename, job.RenamedFilename, job.Timestamp)
+
+	c.JSON(200, gin.H{"status": "retrying", "jobId": id})
 }
 
 type BunnyCreateVideoResponse struct {
@@ -203,7 +277,7 @@ func processBunnyWorkflow(jobID, tempPath, originalFilename, renamedFilename str
 	defer os.Remove(tempPath)
 
 	if cfg.BunnyStreamLibraryID == "" || cfg.BunnyStreamAPIKey == "" {
-		updateJob(jobID, "Failed", 5, fmt.Errorf("Bunny Stream API credentials (BUNNY_STREAM_LIBRARY_ID / BUNNY_STREAM_API_KEY) are missing"))
+		updateJob(jobID, "Failed to upload to Bunny Stream", 5, fmt.Errorf("Bunny Stream API credentials are missing"))
 		return
 	}
 
@@ -245,6 +319,13 @@ func processBunnyWorkflow(jobID, tempPath, originalFilename, renamedFilename str
 	videoID := bunnyVid.GUID
 	log.Printf("[Job %s] Created Bunny Stream video GUID: %s", jobID, videoID)
 
+	// Store BunnyVideoID immediately
+	jobsMutex.Lock()
+	if j, ok := jobs[jobID]; ok {
+		j.BunnyVideoID = videoID
+	}
+	jobsMutex.Unlock()
+
 	// 1b. Binary Upload to Bunny Stream
 	uploadURL := fmt.Sprintf("https://video.bunnycdn.com/library/%s/videos/%s", cfg.BunnyStreamLibraryID, videoID)
 	fileStream, err := os.Open(tempPath)
@@ -274,6 +355,51 @@ func processBunnyWorkflow(jobID, tempPath, originalFilename, renamedFilename str
 		updateJob(jobID, "Bunny upload failed", 20, fmt.Errorf("binary upload error (HTTP %d): %s", uploadResp.StatusCode, string(respBytes)))
 		return
 	}
+
+	// Bunny Upload Succeeded! Mark BunnyUploaded = true
+	jobsMutex.Lock()
+	if j, ok := jobs[jobID]; ok {
+		j.BunnyUploaded = true
+		j.BunnyVideoID = videoID
+		j.Stage = "Waiting for Bunny Stream Transcoding"
+		j.Progress = 25
+		j.Error = ""
+	}
+	jobsMutex.Unlock()
+
+	log.Printf("[Job %s] Upload to Bunny Stream succeeded! Video ID: %s", jobID, videoID)
+
+	// Continue post-upload processing with automatic retry logic
+	runPostUploadProcessingWithRetry(jobID, videoID, originalFilename, renamedFilename, timestamp)
+}
+
+func runPostUploadProcessingWithRetry(jobID, videoID, originalFilename, renamedFilename string, timestamp int64) {
+	maxAttempts := 3
+	var lastErr error
+	var lastFailedStep string
+
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		if attempt > 1 {
+			log.Printf("[Job %s] Retrying post-upload processing (attempt %d/%d)...", jobID, attempt, maxAttempts)
+			time.Sleep(3 * time.Second)
+		}
+
+		failedStep, err := runPostUploadProcessing(jobID, videoID, originalFilename, renamedFilename, timestamp)
+		if err == nil {
+			// Succeeded!
+			return
+		}
+
+		lastFailedStep = failedStep
+		lastErr = err
+		log.Printf("[Job %s] Attempt %d failed at step '%s': %v", jobID, attempt, failedStep, err)
+	}
+
+	markProcessingFailed(jobID, lastFailedStep, lastErr)
+}
+
+func runPostUploadProcessing(jobID, videoID, originalFilename, renamedFilename string, timestamp int64) (string, error) {
+	client := &http.Client{Timeout: 60 * time.Second}
 
 	// STAGE 2: Waiting for Bunny Stream Transcoding
 	updateJob(jobID, "Waiting for Bunny Stream Transcoding", 25, nil)
@@ -310,8 +436,7 @@ func processBunnyWorkflow(jobID, tempPath, originalFilename, renamedFilename str
 		updateJob(jobID, "Waiting for Bunny Stream Transcoding", curProgress, nil)
 
 		if stData.Status == 5 {
-			updateJob(jobID, "Transcoding failed", curProgress, fmt.Errorf("Bunny Stream transcoding failed (status 5)"))
-			return
+			return "Failed while waiting for Bunny Stream Transcoding", fmt.Errorf("Bunny Stream transcoding failed (status 5)")
 		}
 		if stData.Status == 4 || stData.EncodeProgress == 100 {
 			transcodeFinished = true
@@ -320,13 +445,11 @@ func processBunnyWorkflow(jobID, tempPath, originalFilename, renamedFilename str
 	}
 
 	if !transcodeFinished {
-		updateJob(jobID, "Transcoding timed out", 60, fmt.Errorf("Bunny Stream transcoding timed out after 30 minutes"))
-		return
+		return "Failed while waiting for Bunny Stream Transcoding", fmt.Errorf("Bunny Stream transcoding timed out after 30 minutes")
 	}
 
 	if cfg.BunnyStorageZoneName == "" || cfg.BunnyStoragePassword == "" {
-		updateJob(jobID, "Storage Zone missing", 60, fmt.Errorf("Bunny Storage Zone credentials (BUNNY_STORAGE_ZONE_NAME / BUNNY_STORAGE_PASSWORD) are missing"))
-		return
+		return "Failed while downloading ZIP", fmt.Errorf("Bunny Storage Zone credentials are missing")
 	}
 
 	// STAGE 3: Downloading ZIP Package
@@ -343,24 +466,21 @@ func processBunnyWorkflow(jobID, tempPath, originalFilename, renamedFilename str
 			statusText = fmt.Sprintf("HTTP %d", zipResp.StatusCode)
 			zipResp.Body.Close()
 		}
-		updateJob(jobID, "ZIP download failed", 65, fmt.Errorf("failed to download ZIP package from Bunny Stream (%s)", statusText))
-		return
+		return "Failed while downloading ZIP", fmt.Errorf("failed to download ZIP package from Bunny Stream (%s)", statusText)
 	}
 
 	zipPath := filepath.Join("uploads", fmt.Sprintf("package-%s.zip", jobID))
 	outZip, err := os.Create(zipPath)
 	if err != nil {
 		zipResp.Body.Close()
-		updateJob(jobID, "Failed creating ZIP file", 65, err)
-		return
+		return "Failed while downloading ZIP", fmt.Errorf("failed creating ZIP file: %v", err)
 	}
 	_, err = io.Copy(outZip, zipResp.Body)
 	outZip.Close()
 	zipResp.Body.Close()
 	if err != nil {
 		os.Remove(zipPath)
-		updateJob(jobID, "Failed saving ZIP file", 65, err)
-		return
+		return "Failed while downloading ZIP", fmt.Errorf("failed saving ZIP file: %v", err)
 	}
 	defer os.Remove(zipPath)
 
@@ -372,9 +492,11 @@ func processBunnyWorkflow(jobID, tempPath, originalFilename, renamedFilename str
 	defer os.RemoveAll(extractDir)
 
 	extractedFiles, err := unzipFile(zipPath, extractDir)
-	if err != nil {
-		updateJob(jobID, "Extraction failed", 75, fmt.Errorf("failed extracting ZIP package: %v", err))
-		return
+	if err != nil || len(extractedFiles) == 0 {
+		if err == nil {
+			err = fmt.Errorf("no files extracted from ZIP")
+		}
+		return "Failed while extracting ZIP", err
 	}
 
 	log.Printf("[Job %s] Extracted %d files", jobID, len(extractedFiles))
@@ -461,8 +583,7 @@ func processBunnyWorkflow(jobID, tempPath, originalFilename, renamedFilename str
 		r2Key := fmt.Sprintf("videos/%d/%s", timestamp, filepath.Base(localPath))
 		url, err := uploadToR2(ctx, s3Client, localPath, r2Key, "video/mp4")
 		if err != nil {
-			updateJob(jobID, "R2 video upload failed", 85, fmt.Errorf("failed uploading %s to R2: %v", filepath.Base(localPath), err))
-			return
+			return "Failed while uploading to R2", fmt.Errorf("failed uploading %s to R2: %v", filepath.Base(localPath), err)
 		}
 		mp4R2Map[q] = url
 	}
@@ -533,12 +654,6 @@ func processBunnyWorkflow(jobID, tempPath, originalFilename, renamedFilename str
 			totalSizeBytes += fi.Size()
 		}
 	}
-	if totalSizeBytes == 0 {
-		fi, err := os.Stat(tempPath)
-		if err == nil {
-			totalSizeBytes = fi.Size()
-		}
-	}
 	fileSizeMB := fmt.Sprintf("%.2f MB", float64(totalSizeBytes)/(1024*1024))
 
 	// STAGE 6: Saving Metadata to Cloudflare D1
@@ -598,17 +713,29 @@ func processBunnyWorkflow(jobID, tempPath, originalFilename, renamedFilename str
 		d1Req, _ := http.NewRequest("POST", cfg.FrontendAPIURL+"/api/videos", bytes.NewBuffer(d1Payload))
 		d1Req.Header.Set("Content-Type", "application/json")
 		d1Resp, err := client.Do(d1Req)
-		if err == nil {
+		if err != nil || (d1Resp != nil && d1Resp.StatusCode >= 400) {
+			if d1Resp != nil {
+				d1Resp.Body.Close()
+			}
+			return "Failed while saving D1", fmt.Errorf("failed saving metadata to Cloudflare D1")
+		}
+		if d1Resp != nil {
 			d1Resp.Body.Close()
 		}
 	}
 
 	// STAGE 7: Completed
 	updateJob(jobID, "Completed", 100, nil)
+	jobsMutex.Lock()
 	if job, ok := jobs[jobID]; ok {
 		job.Completed = true
+		job.ProcessingFailed = false
+		job.Error = ""
 		job.Result = result
 	}
+	jobsMutex.Unlock()
+
+	return "", nil
 }
 
 func unzipFile(src, dest string) ([]string, error) {

@@ -174,10 +174,12 @@ export type ProcessingStep =
   | "Uploading Files to Cloudflare R2"
   | "Saving Metadata to Cloudflare D1"
   | "Completed"
-  | "Failed";
+  | "Failed"
+  | "Processing Failed";
 
 export interface UploadQueueItem {
   id: string;
+  jobId?: string;
   file: File;
   name: string;
   sizeFormatted: string;
@@ -189,7 +191,7 @@ export interface UploadQueueItem {
 
 export async function uploadAndProcessVideo(
   file: File,
-  onProgress: (progress: number, step: ProcessingStep) => void
+  onProgress: (progress: number, step: ProcessingStep, jobId?: string) => void
 ): Promise<Video> {
   onProgress(5, "Uploading to Bunny Stream");
   
@@ -211,74 +213,111 @@ export async function uploadAndProcessVideo(
     }
 
     const { jobId } = await res.json() as { jobId: string };
-    
-    let jobCompleted = false;
-    let videoData: any = null;
+    onProgress(10, "Uploading to Bunny Stream", jobId);
 
-    while (!jobCompleted) {
-      const statusRes = await fetch(`${KOYEB_SERVER_URL}/upload/status/${jobId}`);
-      if (!statusRes.ok) throw new Error("Failed to fetch job status");
-      
-      const job = await statusRes.json() as any;
-      
-      if (job.error) {
-        throw new Error(job.error);
-      }
-
-      if (job.stage) {
-        onProgress(job.progress || 50, job.stage as ProcessingStep);
-      }
-
-      if (job.completed) {
-        jobCompleted = true;
-        videoData = job.result;
-      } else {
-        await new Promise(resolve => setTimeout(resolve, 2000));
-      }
-    }
-
-    if (!videoData) {
-      throw new Error("Job completed but no video data returned");
-    }
-
-    // Saving Metadata to Cloudflare D1
-    onProgress(95, "Saving Metadata to Cloudflare D1");
-    
-    const videoObject: Video = {
-      ...videoData,
-      id: videoData.id || `vid_${Date.now()}`,
-      slug: videoData.slug || slug,
-      title: videoData.title || file.name,
-      fileSize: videoData.fileSize || `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
-      views: 0,
-      likes: 0,
-      dislikes: 0,
-      duration: videoData.duration || "00:00",
-      releaseYear: new Date().getFullYear(),
-      genres: ["MP4", "HD"],
-      quality: videoData.quality || "1080p",
-      thumbnailUrl: videoData.thumbnailUrl,
-      thumbnails: videoData.thumbnails || (videoData.thumbnailUrl ? [videoData.thumbnailUrl] : []),
-      videoUrl: videoData.videoUrl,
-      uploadedAt: videoData.uploadedAt || videoData.created_at || new Date().toISOString(),
-    };
-
-    // Persist locally
-    saveStoredFiles([videoObject, ...existing]);
-
-    // Sync to Cloudflare D1
-    await fetch("/api/videos", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(videoObject),
-    }).catch(() => {});
-
-    onProgress(100, "Completed");
-    return videoObject;
-
+    return pollJobStatus(jobId, file, slug, onProgress);
   } catch (err: any) {
     console.error("[Upload] Error:", err);
     onProgress(0, "Failed");
     throw err;
   }
+}
+
+export async function retryProcessingVideo(
+  jobId: string,
+  file: File,
+  onProgress: (progress: number, step: ProcessingStep, jobId?: string) => void
+): Promise<Video> {
+  try {
+    const res = await fetch(`${KOYEB_SERVER_URL}/upload/retry/${jobId}`, {
+      method: "POST",
+    });
+
+    if (!res.ok) {
+      return uploadAndProcessVideo(file, onProgress);
+    }
+
+    const existing = getStoredFiles();
+    const slug = generateUniqueSlug(existing);
+    return pollJobStatus(jobId, file, slug, onProgress);
+  } catch (err: any) {
+    console.error("[Retry] Error:", err);
+    throw err;
+  }
+}
+
+async function pollJobStatus(
+  jobId: string,
+  file: File,
+  slug: string,
+  onProgress: (progress: number, step: ProcessingStep, jobId?: string) => void
+): Promise<Video> {
+  let jobCompleted = false;
+  let videoData: any = null;
+
+  while (!jobCompleted) {
+    const statusRes = await fetch(`${KOYEB_SERVER_URL}/upload/status/${jobId}`);
+    if (!statusRes.ok) throw new Error("Failed to fetch job status");
+    
+    const job = await statusRes.json() as any;
+
+    if (job.processingFailed || (job.error && job.bunnyUploaded)) {
+      const failedMsg = job.error || `Processing Failed: ${job.failedStep || "Failed processing step"}`;
+      onProgress(job.progress || 50, "Processing Failed", jobId);
+      throw new Error(failedMsg);
+    }
+
+    if (job.error) {
+      onProgress(0, "Failed", jobId);
+      throw new Error(job.error);
+    }
+
+    if (job.stage) {
+      onProgress(job.progress || 50, job.stage as ProcessingStep, jobId);
+    }
+
+    if (job.completed) {
+      jobCompleted = true;
+      videoData = job.result;
+    } else {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+  }
+
+  if (!videoData) {
+    throw new Error("Job completed but no video data returned");
+  }
+
+  onProgress(95, "Saving Metadata to Cloudflare D1", jobId);
+  
+  const existing = getStoredFiles();
+  const videoObject: Video = {
+    ...videoData,
+    id: videoData.id || `vid_${Date.now()}`,
+    slug: videoData.slug || slug,
+    title: videoData.title || file.name,
+    fileSize: videoData.fileSize || `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
+    views: 0,
+    likes: 0,
+    dislikes: 0,
+    duration: videoData.duration || "00:00",
+    releaseYear: new Date().getFullYear(),
+    genres: ["MP4", "HD"],
+    quality: videoData.quality || "1080p",
+    thumbnailUrl: videoData.thumbnailUrl,
+    thumbnails: videoData.thumbnails || (videoData.thumbnailUrl ? [videoData.thumbnailUrl] : []),
+    videoUrl: videoData.videoUrl,
+    uploadedAt: videoData.uploadedAt || videoData.created_at || new Date().toISOString(),
+  };
+
+  saveStoredFiles([videoObject, ...existing]);
+
+  await fetch("/api/videos", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(videoObject),
+  }).catch(() => {});
+
+  onProgress(100, "Completed", jobId);
+  return videoObject;
 }

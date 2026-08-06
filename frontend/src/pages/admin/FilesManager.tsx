@@ -16,6 +16,7 @@ import { Video } from "../../types";
 import { 
   getStoredFiles, 
   uploadAndProcessVideo, 
+  retryProcessingVideo,
   updateFileThumbnail, 
   deleteFile, 
   UploadQueueItem, 
@@ -80,9 +81,9 @@ export function FilesManager() {
 
   const processQueueItem = async (item: UploadQueueItem) => {
     try {
-      const resultVideo = await uploadAndProcessVideo(item.file, (progress: number, step: ProcessingStep) => {
+      const resultVideo = await uploadAndProcessVideo(item.file, (progress: number, step: ProcessingStep, jobId?: string) => {
         setUploadQueue((prev) =>
-          prev.map((q) => (q.id === item.id ? { ...q, progress, step } : q))
+          prev.map((q) => (q.id === item.id ? { ...q, progress, step, ...(jobId ? { jobId } : {}) } : q))
         );
       });
 
@@ -92,8 +93,43 @@ export function FilesManager() {
 
       refreshFiles();
     } catch (err: any) {
+      const isProcessingFailed = err.message && err.message.startsWith("Processing Failed");
       setUploadQueue((prev) =>
-        prev.map((q) => (q.id === item.id ? { ...q, step: "Failed", error: err.message || "Upload failed" } : q))
+        prev.map((q) => (q.id === item.id ? { ...q, step: isProcessingFailed ? "Processing Failed" : "Failed", error: err.message || "Upload failed" } : q))
+      );
+    }
+  };
+
+  const retryQueueItem = async (item: UploadQueueItem) => {
+    setUploadQueue((prev) =>
+      prev.map((q) => (q.id === item.id ? { ...q, error: undefined, step: "Waiting for Bunny Stream Transcoding", progress: 25 } : q))
+    );
+
+    try {
+      let resultVideo: Video;
+      if (item.jobId) {
+        resultVideo = await retryProcessingVideo(item.jobId, item.file, (progress: number, step: ProcessingStep, jobId?: string) => {
+          setUploadQueue((prev) =>
+            prev.map((q) => (q.id === item.id ? { ...q, progress, step, ...(jobId ? { jobId } : {}) } : q))
+          );
+        });
+      } else {
+        resultVideo = await uploadAndProcessVideo(item.file, (progress: number, step: ProcessingStep, jobId?: string) => {
+          setUploadQueue((prev) =>
+            prev.map((q) => (q.id === item.id ? { ...q, progress, step, ...(jobId ? { jobId } : {}) } : q))
+          );
+        });
+      }
+
+      setUploadQueue((prev) =>
+        prev.map((q) => (q.id === item.id ? { ...q, progress: 100, step: "Completed", completedVideo: resultVideo } : q))
+      );
+
+      refreshFiles();
+    } catch (err: any) {
+      const isProcessingFailed = err.message && err.message.startsWith("Processing Failed");
+      setUploadQueue((prev) =>
+        prev.map((q) => (q.id === item.id ? { ...q, step: isProcessingFailed ? "Processing Failed" : "Failed", error: err.message || "Processing failed" } : q))
       );
     }
   };
@@ -241,8 +277,13 @@ export function FilesManager() {
                         <div className="truncate">
                           <h5 className="text-xs font-black truncate text-foreground/90">{item.name}</h5>
                           <p className="text-[10px] text-muted-foreground font-medium">
-                            {item.sizeFormatted} • <span className="text-emerald-500 font-bold">{item.step}</span>
+                            {item.sizeFormatted} • <span className={item.step === "Failed" || item.step === "Processing Failed" ? "text-rose-500 font-bold" : "text-emerald-500 font-bold"}>{item.step}</span>
                           </p>
+                          {item.error && (
+                            <p className="text-[10px] text-rose-500 font-medium truncate mt-0.5">
+                              {item.error}
+                            </p>
+                          )}
                         </div>
                       </div>
 
@@ -251,10 +292,20 @@ export function FilesManager() {
                           <Badge className="bg-emerald-500 text-white border-none text-[9px] font-black uppercase tracking-widest flex items-center gap-1">
                             <Icons.Check className="h-3 w-3 stroke-[3px]" /> Done
                           </Badge>
-                        ) : item.step === "Failed" ? (
-                          <Badge variant="destructive" className="text-[9px] font-black uppercase tracking-widest">
-                            Failed
-                          </Badge>
+                        ) : item.step === "Failed" || item.step === "Processing Failed" ? (
+                          <div className="flex items-center gap-2">
+                            <Badge variant="destructive" className="text-[9px] font-black uppercase tracking-widest">
+                              {item.step === "Processing Failed" ? "Processing Failed" : "Failed"}
+                            </Badge>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => retryQueueItem(item)}
+                              className="h-7 px-2.5 text-[10px] font-bold border-rose-500/30 text-rose-500 hover:bg-rose-500/10"
+                            >
+                              Retry
+                            </Button>
+                          </div>
                         ) : (
                           <span className="text-xs font-black text-emerald-500">{item.progress}%</span>
                         )}
