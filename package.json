@@ -3,15 +3,15 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "workspaces": [
-    "frontend"
-  ],
   "scripts": {
-    "dev": "npm run dev -w frontend -- --port=3000 --host=0.0.0.0",
-    "build": "npm run build -w frontend",
-    "preview": "npm run preview -w frontend -- --port=3000 --host=0.0.0.0",
-    "start": "npm run preview -w frontend -- --port=3000 --host=0.0.0.0",
-    "lint": "npm run lint -w frontend"
+    "dev": "npm --prefix frontend run dev -- --port=3000 --host=0.0.0.0",
+    "install": "npm --prefix frontend install",
+    "postinstall": "npm --prefix frontend install",
+    "build": "npm --prefix frontend install && npm --prefix frontend run build",
+    "build:backend": "cd backend && go mod download",
+    "preview": "npm --prefix frontend run preview -- --port=3000 --host=0.0.0.0",
+    "start": "npm --prefix frontend run preview -- --port=3000 --host=0.0.0.0",
+    "lint": "npm --prefix frontend run lint"
   },
   "engines": {
     "node": ">=18.0.0"
