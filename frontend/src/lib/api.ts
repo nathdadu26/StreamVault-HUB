@@ -132,22 +132,18 @@ export function getAvailableQualities(video: Video | null): VideoQualityOption[]
 
   if (video.mp4Qualities && typeof video.mp4Qualities === "object") {
     for (const q of standardOrder) {
-      if (video.mp4Qualities[q]) {
-        found.push({ quality: q, url: video.mp4Qualities[q] });
-        added.add(q);
-      }
-    }
-    for (const [q, u] of Object.entries(video.mp4Qualities)) {
-      if (u && !added.has(q)) {
-        found.push({ quality: q, url: u });
+      const url = video.mp4Qualities[q];
+      if (url && typeof url === "string" && url.trim() !== "") {
+        found.push({ quality: q, url: url.trim() });
         added.add(q);
       }
     }
   }
 
   if (found.length === 0 && video.videoUrl) {
-    const defaultQuality = video.quality || "1080p";
-    found.push({ quality: defaultQuality, url: video.videoUrl });
+    const rawQuality = video.quality ? video.quality.toLowerCase() : "";
+    const matchedQuality = standardOrder.find((q) => q === rawQuality) || "1080p";
+    found.push({ quality: matchedQuality, url: video.videoUrl.trim() });
   }
 
   return found;

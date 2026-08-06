@@ -119,6 +119,7 @@ export function VideoPlayer() {
       {/* Plyr Video Container */}
       <div className="w-full rounded-3xl overflow-hidden bg-black shadow-2xl ring-1 ring-white/10">
         <PlyrPlayer
+          key={displayVideo.id || displayVideo.slug}
           src={displayVideo.videoUrl}
           poster={displayVideo.thumbnailUrl}
           mp4Qualities={displayVideo.mp4Qualities}
