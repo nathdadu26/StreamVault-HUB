@@ -19,6 +19,7 @@ export interface Video {
   releaseYear: number;
   genres: string[];
   quality: string;
+  mp4Qualities?: Record<string, string>;
 }
 
 export interface TaskSettings {

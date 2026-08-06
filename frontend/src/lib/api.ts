@@ -307,6 +307,7 @@ async function pollJobStatus(
     thumbnailUrl: videoData.thumbnailUrl,
     thumbnails: videoData.thumbnails || (videoData.thumbnailUrl ? [videoData.thumbnailUrl] : []),
     videoUrl: videoData.videoUrl,
+    mp4Qualities: videoData.mp4Qualities || videoData.mp4_qualities,
     uploadedAt: videoData.uploadedAt || videoData.created_at || new Date().toISOString(),
   };
 

@@ -53,7 +53,12 @@ export function VideoPlayer() {
     <div className="flex flex-col gap-8 w-full max-w-4xl mx-auto pb-20 animate-in fade-in slide-in-from-bottom-8 duration-1000">
       {/* Plyr Video Container */}
       <div className="w-full rounded-3xl overflow-hidden bg-black shadow-2xl ring-1 ring-white/10">
-        <PlyrPlayer src={displayVideo.videoUrl} poster={displayVideo.thumbnailUrl} />
+        <PlyrPlayer
+          src={displayVideo.videoUrl}
+          poster={displayVideo.thumbnailUrl}
+          mp4Qualities={displayVideo.mp4Qualities}
+          title={displayVideo.title}
+        />
       </div>
 
       {/* Video Content Info */}

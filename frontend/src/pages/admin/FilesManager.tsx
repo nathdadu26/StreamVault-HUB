@@ -562,6 +562,8 @@ export function FilesManager() {
               <PlyrPlayer
                 src={previewingVideo.videoUrl}
                 poster={previewingVideo.thumbnailUrl}
+                mp4Qualities={previewingVideo.mp4Qualities}
+                title={previewingVideo.title}
               />
             </div>
           )}
