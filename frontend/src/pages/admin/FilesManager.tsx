@@ -264,60 +264,70 @@ export function FilesManager() {
                 </Button>
               </div>
               <div className="space-y-3">
-                {uploadQueue.map((item) => (
-                  <div
-                    key={item.id}
-                    className="p-4 rounded-xl border border-border/40 bg-muted/20 flex flex-col gap-3"
-                  >
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="flex items-center gap-3 overflow-hidden">
-                        <div className="h-10 w-10 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-500 shrink-0">
-                          <Icons.FileVideo className="h-5 w-5" />
-                        </div>
-                        <div className="truncate">
-                          <h5 className="text-xs font-black truncate text-foreground/90">{item.name}</h5>
-                          <p className="text-[10px] text-muted-foreground font-medium">
-                            {item.sizeFormatted} • <span className={item.step === "Failed" || item.step === "Processing Failed" ? "text-rose-500 font-bold" : "text-emerald-500 font-bold"}>{item.step}</span>
-                          </p>
-                          {item.error && (
-                            <p className="text-[10px] text-rose-500 font-medium truncate mt-0.5">
-                              {item.error}
-                            </p>
-                          )}
-                        </div>
-                      </div>
+                {uploadQueue.map((item) => {
+                  let badgeLabel = "Processing";
+                  let badgeBg = "bg-orange-500";
 
-                      <div className="flex items-center gap-3 shrink-0">
-                        {item.step === "Completed" ? (
-                          <Badge className="bg-emerald-500 text-white border-none text-[9px] font-black uppercase tracking-widest flex items-center gap-1">
-                            <Icons.Check className="h-3 w-3 stroke-[3px]" /> Done
-                          </Badge>
-                        ) : item.step === "Failed" || item.step === "Processing Failed" ? (
-                          <div className="flex items-center gap-2">
-                            <Badge variant="destructive" className="text-[9px] font-black uppercase tracking-widest">
-                              {item.step === "Processing Failed" ? "Processing Failed" : "Failed"}
-                            </Badge>
+                  if (item.step === "Completed") {
+                    badgeLabel = "Ready";
+                    badgeBg = "bg-emerald-600";
+                  } else if (item.step === "Failed" || item.step === "Processing Failed") {
+                    badgeLabel = "Failed";
+                    badgeBg = "bg-rose-600";
+                  } else if (item.step === "Uploading to Bunny Stream") {
+                    badgeLabel = "Uploading";
+                    badgeBg = "bg-blue-600";
+                  }
+
+                  return (
+                    <div
+                      key={item.id}
+                      className="p-3.5 rounded-xl border border-border/40 bg-muted/20 flex flex-col gap-2.5"
+                    >
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3 overflow-hidden min-w-0 flex-1">
+                          <div className="h-9 w-9 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-500 shrink-0">
+                            <Icons.FileVideo className="h-4.5 w-4.5" />
+                          </div>
+                          <div className="truncate min-w-0">
+                            <h5 className="text-xs font-black truncate text-foreground/90">{item.name}</h5>
+                            <p className="text-[10px] text-muted-foreground font-medium">
+                              {item.sizeFormatted}
+                            </p>
+                            {item.error && (
+                              <p className="text-[10px] text-rose-500 font-medium truncate mt-0.5">
+                                {item.error}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          {(item.step === "Failed" || item.step === "Processing Failed") && (
                             <Button
                               variant="outline"
                               size="sm"
                               onClick={() => retryQueueItem(item)}
-                              className="h-7 px-2.5 text-[10px] font-bold border-rose-500/30 text-rose-500 hover:bg-rose-500/10"
+                              className="h-6 px-2.5 text-[10px] font-bold border-rose-500/30 text-rose-500 hover:bg-rose-500/10 rounded-full"
                             >
                               Retry
                             </Button>
-                          </div>
-                        ) : (
-                          <span className="text-xs font-black text-emerald-500">{item.progress}%</span>
-                        )}
+                          )}
+                          <span className={`h-6 px-3 rounded-full text-[10px] font-bold text-white flex items-center justify-center shadow-none border-none shrink-0 ${badgeBg}`}>
+                            {badgeLabel}
+                          </span>
+                        </div>
                       </div>
-                    </div>
 
-                    <Progress
-                      value={item.progress}
-                      className={`h-1.5 ${item.step === "Completed" ? "bg-emerald-500/20" : "bg-emerald-500/10"}`}
-                    />
-                  </div>
-                ))}
+                      {item.step === "Uploading to Bunny Stream" && (
+                        <Progress
+                          value={item.progress}
+                          className="h-1.5 bg-blue-500/10"
+                        />
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
