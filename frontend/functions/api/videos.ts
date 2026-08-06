@@ -29,15 +29,53 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   const { DB } = context.env;
   try {
     const video = await context.request.json() as any;
+
+    let mp4QualitiesStr = "";
+    if (typeof video.mp4Qualities === "string") {
+      mp4QualitiesStr = video.mp4Qualities;
+    } else if (video.mp4Qualities) {
+      mp4QualitiesStr = JSON.stringify(video.mp4Qualities);
+    } else {
+      mp4QualitiesStr = JSON.stringify({});
+    }
+
+    const video_240 = video.video_240 || (video.mp4Qualities ? video.mp4Qualities["240p"] || video.mp4Qualities["280p"] : null) || null;
+    const video_360 = video.video_360 || (video.mp4Qualities ? video.mp4Qualities["360p"] : null) || null;
+    const video_480 = video.video_480 || (video.mp4Qualities ? video.mp4Qualities["480p"] : null) || null;
+    const video_720 = video.video_720 || (video.mp4Qualities ? video.mp4Qualities["720p"] : null) || null;
+    const video_1080 = video.video_1080 || (video.mp4Qualities ? video.mp4Qualities["1080p"] : null) || null;
+
+    const thumbnail_1 = video.thumbnail_1 || null;
+    const thumbnail_2 = video.thumbnail_2 || null;
+    const thumbnail_3 = video.thumbnail_3 || null;
+    const thumbnail_4 = video.thumbnail_4 || null;
+    const thumbnail_5 = video.thumbnail_5 || null;
+
     await DB.prepare(
-      "INSERT INTO videos (id, slug, title, videoUrl, thumbnailUrl, thumbnails, fileSize, duration, views, likes, dislikes, uploadedAt, releaseYear, genres, quality, telegramPosted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)"
+      `INSERT INTO videos (
+        id, slug, title, videoUrl, thumbnailUrl, thumbnails, mp4Qualities,
+        video_240, video_360, video_480, video_720, video_1080,
+        thumbnail_1, thumbnail_2, thumbnail_3, thumbnail_4, thumbnail_5,
+        fileSize, duration, views, likes, dislikes, uploadedAt, releaseYear, genres, quality, telegramPosted
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`
     ).bind(
       video.id,
       video.slug,
       video.title,
       video.videoUrl,
       video.thumbnailUrl,
-      JSON.stringify(video.thumbnails),
+      JSON.stringify(video.thumbnails || []),
+      mp4QualitiesStr,
+      video_240,
+      video_360,
+      video_480,
+      video_720,
+      video_1080,
+      thumbnail_1,
+      thumbnail_2,
+      thumbnail_3,
+      thumbnail_4,
+      thumbnail_5,
       video.fileSize,
       video.duration,
       video.views || 0,
@@ -45,9 +83,10 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       video.dislikes || 0,
       video.uploadedAt,
       video.releaseYear,
-      JSON.stringify(video.genres),
-      video.quality
+      JSON.stringify(video.genres || ["MP4", "HD"]),
+      video.quality || "1080p"
     ).run();
+
     return Response.json({ success: true });
   } catch (err: any) {
     return new Response(JSON.stringify({ error: err.message }), { status: 500 });

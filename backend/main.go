@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -69,6 +70,11 @@ type UploadResult struct {
 	ThumbnailURL string            `json:"thumbnailUrl"`
 	Thumbnails   []string          `json:"thumbnails"`
 	MP4Qualities map[string]string `json:"mp4Qualities,omitempty"`
+	Video240     *string           `json:"video_240,omitempty"`
+	Video360     *string           `json:"video_360,omitempty"`
+	Video480     *string           `json:"video_480,omitempty"`
+	Video720     *string           `json:"video_720,omitempty"`
+	Video1080    *string           `json:"video_1080,omitempty"`
 	Thumbnail1   *string           `json:"thumbnail_1"`
 	Thumbnail2   *string           `json:"thumbnail_2"`
 	Thumbnail3   *string           `json:"thumbnail_3"`
@@ -547,6 +553,43 @@ func runPostUploadProcessingWithRetry(jobID, videoID, originalFilename, renamedF
 	markProcessingFailed(jobID, lastFailedStep, lastErr)
 }
 
+var reQualityP = regexp.MustCompile(`(?i)(\d{3,4})p`)
+var reQualityNum = regexp.MustCompile(`(?i)(\d{3,4})`)
+
+func detectQuality(filename string) string {
+	fname := strings.ToLower(filepath.Base(filename))
+	if m := reQualityP.FindStringSubmatch(fname); len(m) > 1 {
+		return strings.ToLower(m[1]) + "p"
+	}
+	if m := reQualityNum.FindStringSubmatch(fname); len(m) > 1 {
+		return m[1] + "p"
+	}
+	return "mp4"
+}
+
+func deleteBunnyVideo(libraryID, videoID, apiKey string) error {
+	deleteURL := fmt.Sprintf("https://video.bunnycdn.com/library/%s/videos/%s", libraryID, videoID)
+	req, err := http.NewRequest("DELETE", deleteURL, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("AccessKey", apiKey)
+	req.Header.Set("Accept", "application/json")
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 && resp.StatusCode != 204 {
+		respBytes, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("Bunny delete API returned status %d: %s", resp.StatusCode, string(respBytes))
+	}
+	return nil
+}
+
 func runPostUploadProcessing(jobID, videoID, originalFilename, renamedFilename string, timestamp int64) (string, error) {
 	client := &http.Client{Timeout: 60 * time.Second}
 
@@ -603,9 +646,10 @@ func runPostUploadProcessing(jobID, videoID, originalFilename, renamedFilename s
 
 	// STAGE 3: Downloading ZIP Package
 	updateJob(jobID, "Downloading ZIP Package", 65, nil)
+	log.Printf("ZIP Download Started")
+	log.Printf("[Job %s] ZIP Download Started", jobID)
 
 	zipURL := fmt.Sprintf("https://storage.bunnycdn.com/%s/%s/?accessKey=%s&download", cfg.BunnyStorageZoneName, videoID, cfg.BunnyStoragePassword)
-	log.Printf("[Job %s] Downloading ZIP package...", jobID)
 
 	zipReq, _ := http.NewRequest("GET", zipURL, nil)
 	zipResp, err := client.Do(zipReq)
@@ -633,6 +677,9 @@ func runPostUploadProcessing(jobID, videoID, originalFilename, renamedFilename s
 	}
 	defer os.Remove(zipPath)
 
+	log.Printf("ZIP Download Completed")
+	log.Printf("[Job %s] ZIP Download Completed", jobID)
+
 	// STAGE 4: Extracting Files
 	updateJob(jobID, "Extracting Files", 75, nil)
 
@@ -648,36 +695,36 @@ func runPostUploadProcessing(jobID, videoID, originalFilename, renamedFilename s
 		return "Failed while extracting ZIP", err
 	}
 
-	log.Printf("[Job %s] Extracted %d files", jobID, len(extractedFiles))
+	log.Printf("ZIP Extracted")
+	log.Printf("[Job %s] ZIP Extracted (%d files)", jobID, len(extractedFiles))
 
-	mp4Map := make(map[string]string)
+	// Generate single folder slug
+	slug := generateRandomSlug(18)
+
+	type mp4FileItem struct {
+		quality   string
+		localPath string
+	}
+	var mp4Items []mp4FileItem
 	var imgPaths []string
 
 	for _, fpath := range extractedFiles {
 		ext := strings.ToLower(filepath.Ext(fpath))
-		fname := strings.ToLower(filepath.Base(fpath))
-
 		if ext == ".mp4" {
-			q := "mp4"
-			if strings.Contains(fname, "1080") {
-				q = "1080p"
-			} else if strings.Contains(fname, "720") {
-				q = "720p"
-			} else if strings.Contains(fname, "480") {
-				q = "480p"
-			} else if strings.Contains(fname, "360") {
-				q = "360p"
-			} else if strings.Contains(fname, "280") || strings.Contains(fname, "240") {
-				q = "280p"
-			} else {
-				q = strings.TrimSuffix(filepath.Base(fpath), filepath.Ext(fpath))
-			}
-			mp4Map[q] = fpath
+			q := detectQuality(fpath)
+			mp4Items = append(mp4Items, mp4FileItem{quality: q, localPath: fpath})
+			log.Printf("Quality Detected: %s", q)
+			log.Printf("[Job %s] Quality Detected: %s", jobID, q)
 		} else if ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".webp" {
 			imgPaths = append(imgPaths, fpath)
 		}
 	}
 
+	if len(mp4Items) == 0 {
+		return "Failed while extracting ZIP", fmt.Errorf("no .mp4 video files found in extracted ZIP")
+	}
+
+	// Organize Thumbnails
 	var mainThumbPath string
 	var thumb1Path, thumb2Path, thumb3Path, thumb4Path, thumb5Path string
 	var remainingImgs []string
@@ -725,18 +772,30 @@ func runPostUploadProcessing(jobID, videoID, originalFilename, renamedFilename s
 	s3Client := getS3Client()
 
 	mp4R2Map := make(map[string]string)
-	var mainVideoURL string
+	dateStr := time.Now().Format("0201061504") // DDMMYYHHMM (e.g. 0608261359)
 
-	preferredQualities := []string{"1080p", "720p", "480p", "360p", "280p", "mp4"}
-	for q, localPath := range mp4Map {
-		r2Key := fmt.Sprintf("videos/%d/%s", timestamp, filepath.Base(localPath))
-		url, err := uploadToR2(ctx, s3Client, localPath, r2Key, "video/mp4")
-		if err != nil {
-			return "Failed while uploading to R2", fmt.Errorf("failed uploading %s to R2: %v", filepath.Base(localPath), err)
+	for _, item := range mp4Items {
+		log.Printf("Uploading %s to R2", item.quality)
+		log.Printf("[Job %s] Uploading %s to R2", jobID, item.quality)
+
+		ext := filepath.Ext(item.localPath)
+		if ext == "" {
+			ext = ".mp4"
 		}
-		mp4R2Map[q] = url
+		newFilename := fmt.Sprintf("TG-@atoz_links-VID-%s-%s%s", item.quality, dateStr, ext)
+		// Single folder structure: /{slug}/
+		r2Key := fmt.Sprintf("%s/%s", slug, newFilename)
+
+		url, err := uploadToR2(ctx, s3Client, item.localPath, r2Key, "video/mp4")
+		if err != nil {
+			return "Failed while uploading to R2", fmt.Errorf("failed uploading %s (%s) to R2: %v", item.quality, newFilename, err)
+		}
+		mp4R2Map[item.quality] = url
 	}
 
+	// Determine Main Video URL
+	var mainVideoURL string
+	preferredQualities := []string{"1080p", "720p", "480p", "360p", "240p", "280p", "mp4"}
 	for _, prefQ := range preferredQualities {
 		if url, exists := mp4R2Map[prefQ]; exists {
 			mainVideoURL = url
@@ -750,17 +809,23 @@ func runPostUploadProcessing(jobID, videoID, originalFilename, renamedFilename s
 		}
 	}
 
+	// Upload Thumbnails
+	log.Printf("Uploading Thumbnails")
+	log.Printf("[Job %s] Uploading Thumbnails", jobID)
+
 	uploadImgToR2 := func(localPath string) string {
 		if localPath == "" {
 			return ""
 		}
 		contentType := "image/jpeg"
-		if strings.HasSuffix(localPath, ".png") {
+		ext := strings.ToLower(filepath.Ext(localPath))
+		if ext == ".png" {
 			contentType = "image/png"
-		} else if strings.HasSuffix(localPath, ".webp") {
+		} else if ext == ".webp" {
 			contentType = "image/webp"
 		}
-		r2Key := fmt.Sprintf("thumbnails/%d/%s", timestamp, filepath.Base(localPath))
+		// Single folder structure: /{slug}/
+		r2Key := fmt.Sprintf("%s/%s", slug, filepath.Base(localPath))
 		url, err := uploadToR2(ctx, s3Client, localPath, r2Key, contentType)
 		if err != nil {
 			log.Printf("[Job %s] Warning uploading thumbnail %s to R2: %v", jobID, localPath, err)
@@ -787,18 +852,13 @@ func runPostUploadProcessing(jobID, videoID, originalFilename, renamedFilename s
 	}
 
 	durationStr := "00:00"
-	var primaryPath string
-	for _, p := range mp4Map {
-		primaryPath = p
-		break
-	}
-	if primaryPath != "" {
-		durationStr = getDuration(primaryPath)
+	if len(mp4Items) > 0 && mp4Items[0].localPath != "" {
+		durationStr = getDuration(mp4Items[0].localPath)
 	}
 
 	var totalSizeBytes int64
-	for _, p := range mp4Map {
-		fi, err := os.Stat(p)
+	for _, item := range mp4Items {
+		fi, err := os.Stat(item.localPath)
 		if err == nil {
 			totalSizeBytes += fi.Size()
 		}
@@ -807,8 +867,9 @@ func runPostUploadProcessing(jobID, videoID, originalFilename, renamedFilename s
 
 	// STAGE 6: Saving Metadata to Cloudflare D1
 	updateJob(jobID, "Saving Metadata to Cloudflare D1", 95, nil)
+	log.Printf("Saving D1")
+	log.Printf("[Job %s] Saving D1", jobID)
 
-	slug := generateRandomSlug(18)
 	nowISO := time.Now().Format(time.RFC3339)
 
 	stringOrNil := func(s string) *string {
@@ -819,6 +880,11 @@ func runPostUploadProcessing(jobID, videoID, originalFilename, renamedFilename s
 	}
 
 	titleWithoutExt := strings.TrimSuffix(originalFilename, filepath.Ext(originalFilename))
+
+	v240Url := stringOrNil(mp4R2Map["240p"])
+	if v240Url == nil {
+		v240Url = stringOrNil(mp4R2Map["280p"])
+	}
 
 	result := &UploadResult{
 		ID:           fmt.Sprintf("vid_%d", timestamp),
@@ -831,6 +897,11 @@ func runPostUploadProcessing(jobID, videoID, originalFilename, renamedFilename s
 		ThumbnailURL: mainThumbR2,
 		Thumbnails:   allThumbs,
 		MP4Qualities: mp4R2Map,
+		Video240:     v240Url,
+		Video360:     stringOrNil(mp4R2Map["360p"]),
+		Video480:     stringOrNil(mp4R2Map["480p"]),
+		Video720:     stringOrNil(mp4R2Map["720p"]),
+		Video1080:    stringOrNil(mp4R2Map["1080p"]),
 		Thumbnail1:   stringOrNil(t1R2),
 		Thumbnail2:   stringOrNil(t2R2),
 		Thumbnail3:   stringOrNil(t3R2),
@@ -849,6 +920,17 @@ func runPostUploadProcessing(jobID, videoID, originalFilename, renamedFilename s
 			"videoUrl":     result.VideoURL,
 			"thumbnailUrl": result.ThumbnailURL,
 			"thumbnails":   result.Thumbnails,
+			"mp4Qualities": result.MP4Qualities,
+			"video_240":    result.Video240,
+			"video_360":    result.Video360,
+			"video_480":    result.Video480,
+			"video_720":    result.Video720,
+			"video_1080":   result.Video1080,
+			"thumbnail_1":  result.Thumbnail1,
+			"thumbnail_2":  result.Thumbnail2,
+			"thumbnail_3":  result.Thumbnail3,
+			"thumbnail_4":  result.Thumbnail4,
+			"thumbnail_5":  result.Thumbnail5,
 			"fileSize":     result.FileSize,
 			"duration":     result.Duration,
 			"views":        0,
@@ -873,7 +955,19 @@ func runPostUploadProcessing(jobID, videoID, originalFilename, renamedFilename s
 		}
 	}
 
-	// STAGE 7: Completed
+	// STAGE 7: Cleanup Bunny Stream
+	log.Printf("Deleting Bunny Video")
+	log.Printf("[Job %s] Deleting Bunny Video (%s)...", jobID, videoID)
+	if err := deleteBunnyVideo(cfg.BunnyStreamLibraryID, videoID, cfg.BunnyStreamAPIKey); err != nil {
+		log.Printf("[Job %s] Warning deleting Bunny Video %s: %v", jobID, videoID, err)
+	} else {
+		log.Printf("[Job %s] Successfully deleted original Bunny Video %s", jobID, videoID)
+	}
+
+	log.Printf("Workflow Completed")
+	log.Printf("[Job %s] Workflow Completed successfully!", jobID)
+
+	// STAGE 8: Completed
 	updateJob(jobID, "Completed", 100, nil)
 	jobsMutex.Lock()
 	if job, ok := jobs[jobID]; ok {
