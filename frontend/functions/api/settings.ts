@@ -1,9 +1,12 @@
+import { ensureDatabaseSchema } from "./dbInit";
+
 interface Env {
   DB: D1Database;
 }
 
 export const onRequestGet: PagesFunction<Env> = async (context) => {
   const { DB } = context.env;
+  await ensureDatabaseSchema(DB);
   try {
     const result = await DB.prepare("SELECT * FROM settings LIMIT 1").first();
     return Response.json(result || {});
@@ -14,6 +17,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
 
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   const { DB } = context.env;
+  await ensureDatabaseSchema(DB);
   try {
     const settings = await context.request.json() as any;
     // Simple upsert logic for D1
@@ -37,3 +41,4 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     return new Response(JSON.stringify({ error: err.message }), { status: 500 });
   }
 };
+

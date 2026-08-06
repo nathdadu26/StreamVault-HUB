@@ -352,17 +352,30 @@ export function updateFileThumbnail(id: string, newThumbnailUrl: string, title?:
   return updated;
 }
 
-export function deleteFile(id: string): Video[] {
+export async function deleteFile(id: string, slug?: string): Promise<{ success: boolean; error?: string }> {
   const files = getStoredFiles();
-  const filtered = files.filter((f) => f.id !== id);
+  const filtered = files.filter((f) => f.id !== id && (slug ? f.slug !== slug : true));
   saveStoredFiles(filtered);
 
-  // Also try to delete from Cloudflare D1 Function if available
-  fetch(`/api/videos?id=${encodeURIComponent(id)}`, {
-    method: "DELETE",
-  }).catch(() => {});
+  try {
+    const params = new URLSearchParams();
+    if (id) params.set("id", id);
+    if (slug) params.set("slug", slug);
 
-  return filtered;
+    const res = await fetch(`/api/videos?${params.toString()}`, {
+      method: "DELETE",
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || `Server responded with status ${res.status}`);
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("[deleteFile Error]", err);
+    return { success: false, error: err.message || "Failed to delete video" };
+  }
 }
 
 // Direct D1 Visitors Persistence

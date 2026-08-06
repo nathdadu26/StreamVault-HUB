@@ -1,24 +1,24 @@
+import { ensureDatabaseSchema } from "./dbInit";
+
 interface Env {
   DB: D1Database;
+  R2?: any;
+  BUCKET?: any;
+  MY_BUCKET?: any;
 }
 
 export const onRequestGet: PagesFunction<Env> = async (context) => {
   const { DB } = context.env;
+  await ensureDatabaseSchema(DB);
   const url = new URL(context.request.url);
   const slug = url.searchParams.get("slug");
   const pending = url.searchParams.get("pending");
-  const markPosted = url.searchParams.get("markPosted");
 
   try {
     if (slug) {
       console.log(`[D1 Query] Requested slug: "${slug}"`);
       const result = await DB.prepare("SELECT * FROM videos WHERE slug = ? LIMIT 1").bind(slug).first();
       console.log(`[D1 Query] SQL query result for "${slug}":`, result ? "Record found" : "Record not found");
-      if (result) {
-        console.log(`[D1 Query] Record found:`, JSON.stringify(result));
-      } else {
-        console.log(`[D1 Query] Record not found for slug: "${slug}"`);
-      }
       return Response.json(result || null);
     }
     if (pending === "true") {
@@ -34,6 +34,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
 
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   const { DB } = context.env;
+  await ensureDatabaseSchema(DB);
   try {
     const video = await context.request.json() as any;
 
@@ -102,6 +103,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 
 export const onRequestPut: PagesFunction<Env> = async (context) => {
   const { DB } = context.env;
+  await ensureDatabaseSchema(DB);
   try {
     const { id, thumbnailUrl, title, telegramPosted } = await context.request.json() as any;
     if (telegramPosted !== undefined) {
@@ -119,12 +121,66 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
 
 export const onRequestDelete: PagesFunction<Env> = async (context) => {
   const { DB } = context.env;
+  await ensureDatabaseSchema(DB);
+
   const url = new URL(context.request.url);
-  const id = url.searchParams.get("id");
+  let id = url.searchParams.get("id");
+  let slug = url.searchParams.get("slug");
+
+  if (!id && !slug) {
+    try {
+      const body = await context.request.json() as any;
+      if (body) {
+        id = body.id || id;
+        slug = body.slug || slug;
+      }
+    } catch {}
+  }
+
+  if (!id && !slug) {
+    return new Response(JSON.stringify({ error: "Missing video id or slug parameter" }), { status: 400 });
+  }
+
   try {
-    await DB.prepare("DELETE FROM videos WHERE id = ?").bind(id).run();
-    return Response.json({ success: true });
+    let videoRecord: any = null;
+    if (id) {
+      videoRecord = await DB.prepare("SELECT * FROM videos WHERE id = ? LIMIT 1").bind(id).first();
+    }
+    if (!videoRecord && slug) {
+      videoRecord = await DB.prepare("SELECT * FROM videos WHERE slug = ? LIMIT 1").bind(slug).first();
+    }
+
+    const targetSlug = videoRecord?.slug || slug;
+    const targetId = videoRecord?.id || id;
+
+    // Delete related files from R2 slug folder if R2 binding exists
+    const bucket = context.env.R2 || context.env.BUCKET || context.env.MY_BUCKET;
+    if (bucket && targetSlug) {
+      try {
+        const prefix = `${targetSlug}/`;
+        const list = await bucket.list({ prefix });
+        if (list && list.objects && list.objects.length > 0) {
+          for (const obj of list.objects) {
+            await bucket.delete(obj.key);
+          }
+        }
+      } catch (r2Err) {
+        console.error("[R2 Delete Error]", r2Err);
+      }
+    }
+
+    // Permanently delete from Cloudflare D1
+    if (targetId && targetSlug) {
+      await DB.prepare("DELETE FROM videos WHERE id = ? OR slug = ?").bind(targetId, targetSlug).run();
+    } else if (targetId) {
+      await DB.prepare("DELETE FROM videos WHERE id = ?").bind(targetId).run();
+    } else if (targetSlug) {
+      await DB.prepare("DELETE FROM videos WHERE slug = ?").bind(targetSlug).run();
+    }
+
+    return Response.json({ success: true, deletedId: targetId, deletedSlug: targetSlug });
   } catch (err: any) {
     return new Response(JSON.stringify({ error: err.message }), { status: 500 });
   }
 };
+

@@ -1,9 +1,12 @@
+import { ensureDatabaseSchema } from "./dbInit";
+
 interface Env {
   DB: D1Database;
 }
 
 export const onRequestGet: PagesFunction<Env> = async (context) => {
   const { DB } = context.env;
+  await ensureDatabaseSchema(DB);
   try {
     const { results } = await DB.prepare("SELECT * FROM visitors ORDER BY visitedAt DESC LIMIT 100").all();
     return Response.json(results);
@@ -14,6 +17,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
 
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   const { DB } = context.env;
+  await ensureDatabaseSchema(DB);
   try {
     const visitor = await context.request.json() as any;
     await DB.prepare(
@@ -33,3 +37,4 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     return new Response(JSON.stringify({ error: err.message }), { status: 500 });
   }
 };
+

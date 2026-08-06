@@ -33,9 +33,18 @@ export function FilesManager() {
   const [editingThumbnailUrl, setEditingThumbnailUrl] = useState("");
   const [previewingVideo, setPreviewingVideo] = useState<Video | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { isOnline } = useBackendHealth();
+
+  const triggerToast = (message: string, type: "success" | "error") => {
+    setToast({ message, type });
+    setTimeout(() => {
+      setToast(null);
+    }, 3500);
+  };
 
   useEffect(() => {
     refreshFiles();
@@ -92,10 +101,23 @@ export function FilesManager() {
     setEditingVideo(null);
   };
 
-  const handleDelete = (id: string) => {
-    deleteFile(id);
-    refreshFiles();
-    setDeleteConfirmId(null);
+  const handleDelete = async (id: string) => {
+    const target = files.find((f) => f.id === id);
+    setIsDeleting(true);
+    try {
+      const result = await deleteFile(id, target?.slug);
+      if (result.success) {
+        setFiles((prev) => prev.filter((f) => f.id !== id && (target ? f.slug !== target.slug : true)));
+        triggerToast("Video permanently deleted from Cloudflare D1 and R2.", "success");
+      } else {
+        triggerToast(result.error || "Failed to delete video record.", "error");
+      }
+    } catch (err: any) {
+      triggerToast("Unexpected error while deleting video.", "error");
+    } finally {
+      setIsDeleting(false);
+      setDeleteConfirmId(null);
+    }
   };
 
   const filteredFiles = files.filter(
@@ -447,7 +469,7 @@ export function FilesManager() {
       </Dialog>
 
       {/* Delete Confirmation Modal */}
-      <Dialog open={!!deleteConfirmId} onOpenChange={(open) => !open && setDeleteConfirmId(null)}>
+      <Dialog open={!!deleteConfirmId} onOpenChange={(open) => !open && !isDeleting && setDeleteConfirmId(null)}>
         <DialogContent className="sm:max-w-md bg-card border-none shadow-2xl p-6 rounded-2xl space-y-6">
           <DialogHeader>
             <DialogTitle className="text-lg font-black text-destructive">Delete File from D1 & R2?</DialogTitle>
@@ -456,19 +478,43 @@ export function FilesManager() {
             This action will permanently delete the database entry from Cloudflare D1 and remove all associated MP4 and thumbnail files from Cloudflare R2.
           </p>
           <div className="flex items-center justify-end gap-3 pt-2">
-            <Button variant="outline" onClick={() => setDeleteConfirmId(null)} className="rounded-xl h-10 font-bold">
+            <Button variant="outline" disabled={isDeleting} onClick={() => setDeleteConfirmId(null)} className="rounded-xl h-10 font-bold">
               Cancel
             </Button>
             <Button
+              disabled={isDeleting}
               onClick={() => deleteConfirmId && handleDelete(deleteConfirmId)}
               variant="destructive"
-              className="rounded-xl h-10 px-6 font-black"
+              className="rounded-xl h-10 px-6 font-black gap-2"
             >
-              Confirm Delete
+              {isDeleting ? (
+                <>
+                  <Icons.Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Deleting...</span>
+                </>
+              ) : (
+                <span>Confirm Delete</span>
+              )}
             </Button>
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Toast Notification */}
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 bg-slate-900 text-white px-5 py-3.5 rounded-2xl shadow-2xl border border-white/10 text-xs font-bold animate-in fade-in slide-in-from-bottom-3 duration-300">
+          {toast.type === "success" ? (
+            <div className="h-6 w-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+              <Icons.Check className="h-3.5 w-3.5 stroke-[3px]" />
+            </div>
+          ) : (
+            <div className="h-6 w-6 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0">
+              <Icons.AlertTriangle className="h-3.5 w-3.5" />
+            </div>
+          )}
+          <span>{toast.message}</span>
+        </div>
+      )}
 
       {/* Preview Modal */}
       <Dialog open={!!previewingVideo} onOpenChange={(open) => !open && setPreviewingVideo(null)}>
