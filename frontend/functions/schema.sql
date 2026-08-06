@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS videos (
     videoUrl TEXT,
     thumbnailUrl TEXT,
     thumbnails TEXT, -- JSON array
+    mp4Qualities TEXT, -- JSON object
     fileSize TEXT,
     duration TEXT,
     views INTEGER DEFAULT 0,

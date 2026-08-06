@@ -2,6 +2,8 @@ import { ProcessingStep, Video } from "../types";
 import { getStoredFiles, saveStoredFiles, generateUniqueSlug, KOYEB_SERVER_URL } from "./api";
 import {
   StoredUploadItem,
+  generateUUID,
+  generateFileFingerprint,
   saveItemToDb,
   loadAllItemsFromDb,
   deleteItemFromDb,
@@ -68,31 +70,62 @@ class UploadManagerClass {
     }
   }
 
+  private logStage(uploadId: string, stage: string, details?: string) {
+    const detailStr = details ? ` (${details})` : "";
+    console.log(`[Upload Workflow | ${uploadId}] ${stage}${detailStr}`);
+  }
+
   public async addFiles(fileList: FileList | File[]): Promise<void> {
     const validFiles = Array.from(fileList).filter(
       (f) => f.type.startsWith("video/") || f.name.match(/\.(mp4|mov|mkv|avi|webm)$/i)
     );
     if (validFiles.length === 0) return;
 
-    const newItems: StoredUploadItem[] = validFiles.map((file) => ({
-      id: `upload_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
-      file,
-      name: file.name,
-      sizeFormatted: (file.size / (1024 * 1024)).toFixed(1) + " MB",
-      progress: 0,
-      step: "Uploading to Bunny Stream",
-      createdAt: Date.now(),
-      retryCount: 0,
-    }));
+    const itemsToStart: StoredUploadItem[] = [];
 
-    for (const item of newItems) {
-      await saveItemToDb(item);
-      this.queue.push(item);
+    for (const file of validFiles) {
+      const fp = generateFileFingerprint(file);
+
+      // Requirement 5: Duplicate Protection
+      // Check if matching upload already exists
+      const existing = this.queue.find(
+        (item) => item.fingerprint === fp || (item.name === file.name && item.file?.size === file.size)
+      );
+
+      if (existing) {
+        console.log(`[Upload Workflow | ${existing.uploadId || existing.id}] Duplicate detected for "${file.name}". Resuming existing item.`);
+        if (!existing.file) {
+          this.updateItem(existing.id, { file });
+        }
+        if (existing.step !== "Completed") {
+          itemsToStart.push(existing);
+        }
+        continue;
+      }
+
+      const uploadId = generateUUID();
+      const newItem: StoredUploadItem = {
+        id: uploadId,
+        uploadId,
+        fingerprint: fp,
+        file,
+        name: file.name,
+        sizeFormatted: (file.size / (1024 * 1024)).toFixed(1) + " MB",
+        progress: 0,
+        step: "Uploading to Bunny Stream",
+        createdAt: Date.now(),
+        retryCount: 0,
+      };
+
+      await saveItemToDb(newItem);
+      this.queue.push(newItem);
+      itemsToStart.push(newItem);
+      this.logStage(uploadId, "Upload Started", file.name);
     }
 
     this.notify();
 
-    for (const item of newItems) {
+    for (const item of itemsToStart) {
       this.startWorker(item.id);
     }
   }
@@ -102,6 +135,20 @@ class UploadManagerClass {
       if (item.step !== "Completed") {
         this.startWorker(item.id);
       }
+    }
+  }
+
+  private async verifyBunnyVideo(bunnyVideoId: string, signal?: AbortSignal): Promise<{ exists: boolean; status?: number }> {
+    try {
+      const res = await fetch(`${KOYEB_SERVER_URL}/upload/verify-bunny/${bunnyVideoId}`, { signal });
+      if (!res.ok) return { exists: false };
+      const data = await res.json();
+      return {
+        exists: data.exists ?? false,
+        status: data.status,
+      };
+    } catch {
+      return { exists: false };
     }
   }
 
@@ -135,17 +182,28 @@ class UploadManagerClass {
         return;
       }
 
+      const uploadId = item.uploadId || item.id;
+
       try {
-        // Step 1: Uploading to Bunny Stream if no jobId yet
+        // Step 1: Bunny Stream Verification & Resume Check
+        if (item.bunnyVideoId) {
+          const verification = await this.verifyBunnyVideo(item.bunnyVideoId, signal);
+          if (verification.exists) {
+            this.logStage(uploadId, "Upload Confirmed by Bunny", `GUID: ${item.bunnyVideoId}`);
+          }
+        }
+
+        // Step 2: Upload / Start job if no jobId yet
         if (!item.jobId) {
-          if (!item.file) {
+          if (!item.file && !item.bunnyVideoId) {
             this.updateItem(id, {
               step: "Failed",
-              error: "File data not available to resume upload",
+              error: "File data not available and no Bunny Video ID saved to resume",
             });
             return;
           }
 
+          this.logStage(uploadId, "Upload Started");
           this.updateItem(id, {
             step: "Uploading to Bunny Stream",
             error: undefined,
@@ -154,28 +212,57 @@ class UploadManagerClass {
           const existing = getStoredFiles();
           const slug = generateUniqueSlug(existing);
 
-          const { jobId } = await uploadFileXHR(
-            item.file,
-            slug,
-            (percent) => {
-              this.updateItem(id, {
-                progress: percent,
-                step: "Uploading to Bunny Stream",
-              });
-            },
-            signal
-          );
+          let uploadRes: { jobId: string; bunnyVideoId?: string; bunnyUploaded?: boolean; completed?: boolean; result?: any };
+
+          if (item.file) {
+            uploadRes = await uploadFileXHR(
+              item.file,
+              slug,
+              uploadId,
+              item.fingerprint,
+              item.bunnyVideoId,
+              (percent) => {
+                this.updateItem(id, {
+                  progress: percent,
+                  step: "Uploading to Bunny Stream",
+                });
+              },
+              signal
+            );
+          } else {
+            const statusRes = await fetch(`${KOYEB_SERVER_URL}/upload/status/${item.id}`, { signal });
+            if (!statusRes.ok) throw new Error("Unable to restore job without file binary");
+            uploadRes = await statusRes.json();
+          }
 
           if (signal.aborted) return;
 
+          const assignedBunnyVid = uploadRes.bunnyVideoId || item.bunnyVideoId;
+          if (assignedBunnyVid) {
+            this.logStage(uploadId, "Upload Confirmed by Bunny", `GUID: ${assignedBunnyVid}`);
+          }
+
           this.updateItem(id, {
-            jobId,
+            jobId: uploadRes.jobId || item.id,
+            bunnyVideoId: assignedBunnyVid,
             progress: 100,
             step: "Waiting for Bunny Stream Transcoding",
           });
+
+          if (uploadRes.completed && uploadRes.result) {
+            this.logStage(uploadId, "Completed");
+            this.updateItem(id, {
+              step: "Completed",
+              progress: 100,
+              completedVideo: uploadRes.result,
+              error: undefined,
+            });
+            if (this.onFilesChangedCallback) this.onFilesChangedCallback();
+            return;
+          }
         }
 
-        // Step 2: Poll / Retry backend processing until completed
+        // Step 3: Poll / Retry backend processing until completed
         const currentItem = this.queue.find((i) => i.id === id);
         if (!currentItem || !currentItem.jobId) continue;
 
@@ -190,6 +277,7 @@ class UploadManagerClass {
         if (signal.aborted) return;
 
         // Completed!
+        this.logStage(uploadId, "Completed");
         this.updateItem(id, {
           step: "Completed",
           progress: 100,
@@ -209,7 +297,7 @@ class UploadManagerClass {
 
         retryCount++;
         const delay = getBackoffDelay(retryCount);
-        console.warn(`[UploadWorker ${id}] Error encountered. Retrying in ${delay / 1000}s (Attempt ${retryCount}):`, err?.message || err);
+        console.warn(`[UploadWorker ${uploadId}] Error encountered. Retrying in ${delay / 1000}s (Attempt ${retryCount}):`, err?.message || err);
 
         this.updateItem(id, {
           retryCount,
@@ -241,9 +329,12 @@ class UploadManagerClass {
   ): Promise<Video> {
     let jobCompleted = false;
     let videoData: any = null;
+    const loggedStages = new Set<string>();
+
+    const item = this.queue.find((i) => i.id === id);
+    const uploadId = item?.uploadId || id;
 
     while (!jobCompleted && !signal.aborted) {
-      // 1. Fetch status
       let job: any = null;
       try {
         const statusRes = await fetch(`${KOYEB_SERVER_URL}/upload/status/${jobId}`, { signal });
@@ -254,9 +345,34 @@ class UploadManagerClass {
         throw err; // Trigger exponential backoff retry in worker loop
       }
 
+      if (job.bunnyVideoId && (!item?.bunnyVideoId || item.bunnyVideoId !== job.bunnyVideoId)) {
+        this.updateItem(id, { bunnyVideoId: job.bunnyVideoId });
+      }
+
+      // Log stages according to Requirement 9
+      const stage = job.stage || "";
+      if (stage && !loggedStages.has(stage)) {
+        loggedStages.add(stage);
+        if (stage === "Waiting for Bunny Stream Transcoding") {
+          this.logStage(uploadId, "Transcoding Started");
+        } else if (stage === "Downloading ZIP Package") {
+          if (!loggedStages.has("Transcoding Completed")) {
+            loggedStages.add("Transcoding Completed");
+            this.logStage(uploadId, "Transcoding Completed");
+          }
+          this.logStage(uploadId, "ZIP Downloaded");
+        } else if (stage === "Extracting Files") {
+          this.logStage(uploadId, "Files Extracted");
+        } else if (stage === "Uploading Files to Cloudflare R2") {
+          this.logStage(uploadId, "R2 Upload Complete");
+        } else if (stage === "Saving Metadata to Cloudflare D1") {
+          this.logStage(uploadId, "D1 Saved");
+        }
+      }
+
       // If processing failed in backend pipeline, auto-retry processing endpoint
       if (job.processingFailed || (job.error && job.bunnyUploaded)) {
-        console.log(`[UploadWorker ${id}] Processing failed on backend. Triggering retry endpoint...`);
+        console.log(`[UploadWorker ${uploadId}] Processing failed on backend. Triggering retry endpoint...`);
         try {
           await fetch(`${KOYEB_SERVER_URL}/upload/retry/${jobId}`, {
             method: "POST",

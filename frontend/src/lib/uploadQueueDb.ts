@@ -3,6 +3,9 @@ import { getStoredFiles, saveStoredFiles, generateUniqueSlug, KOYEB_SERVER_URL }
 
 export interface StoredUploadItem {
   id: string;
+  uploadId: string;
+  fingerprint: string;
+  bunnyVideoId?: string;
   jobId?: string;
   file?: File;
   name: string;
@@ -13,6 +16,22 @@ export interface StoredUploadItem {
   completedVideo?: Video;
   createdAt: number;
   retryCount?: number;
+}
+
+export function generateUUID(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+export function generateFileFingerprint(file: File): string {
+  const sanitizeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+  return `${sanitizeName}_${file.size}_${file.lastModified}`;
 }
 
 const DB_NAME = "AtoZUploadQueueDB";
@@ -115,14 +134,22 @@ export async function clearAllFromDb(): Promise<void> {
 export function uploadFileXHR(
   file: File,
   slug: string,
-  onProgress: (percent: number) => void,
+  uploadId: string,
+  fingerprint: string,
+  bunnyVideoId?: string,
+  onProgress?: (percent: number) => void,
   signal?: AbortSignal
-): Promise<{ jobId: string }> {
+): Promise<{ jobId: string; bunnyVideoId?: string; bunnyUploaded?: boolean; completed?: boolean; result?: any }> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     const formData = new FormData();
     formData.append("video", file);
     formData.append("slug", slug);
+    formData.append("uploadId", uploadId);
+    formData.append("fingerprint", fingerprint);
+    if (bunnyVideoId) {
+      formData.append("bunnyVideoId", bunnyVideoId);
+    }
 
     if (signal) {
       if (signal.aborted) {
@@ -135,18 +162,20 @@ export function uploadFileXHR(
       });
     }
 
-    xhr.upload.addEventListener("progress", (e) => {
-      if (e.lengthComputable && e.total > 0) {
-        const pct = Math.round((e.loaded / e.total) * 100);
-        onProgress(Math.min(99, Math.max(0, pct)));
-      }
-    });
+    if (onProgress) {
+      xhr.upload.addEventListener("progress", (e) => {
+        if (e.lengthComputable && e.total > 0) {
+          const pct = Math.round((e.loaded / e.total) * 100);
+          onProgress(Math.min(99, Math.max(0, pct)));
+        }
+      });
+    }
 
     xhr.addEventListener("load", () => {
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
           const data = JSON.parse(xhr.responseText);
-          onProgress(100);
+          if (onProgress) onProgress(100);
           resolve(data);
         } catch {
           reject(new Error("Invalid response from upload server"));

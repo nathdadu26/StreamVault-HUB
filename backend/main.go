@@ -54,6 +54,8 @@ type JobStatus struct {
 	OriginalFilename string        `json:"originalFilename,omitempty"`
 	RenamedFilename  string        `json:"renamedFilename,omitempty"`
 	Timestamp        int64         `json:"timestamp,omitempty"`
+	UploadID         string        `json:"uploadId,omitempty"`
+	Fingerprint      string        `json:"fingerprint,omitempty"`
 }
 
 type UploadResult struct {
@@ -181,6 +183,20 @@ func main() {
 		}
 		c.JSON(200, job)
 	})
+	r.GET("/upload/verify-bunny/:bunnyVideoId", func(c *gin.Context) {
+		bunnyVideoID := c.Param("bunnyVideoId")
+		stData, err := verifyBunnyVideo(bunnyVideoID)
+		if err != nil || stData == nil {
+			c.JSON(404, gin.H{"exists": false, "error": "Video not found on Bunny Stream"})
+			return
+		}
+		c.JSON(200, gin.H{
+			"exists":         true,
+			"guid":           stData.GUID,
+			"status":         stData.Status,
+			"encodeProgress": stData.EncodeProgress,
+		})
+	})
 	r.POST("/upload/retry/:id", handleRetryProcessing)
 
 	// Start Telegram Worker
@@ -193,11 +209,125 @@ func main() {
 	r.Run(":" + port)
 }
 
+func verifyBunnyVideo(videoID string) (*BunnyVideoStatusResponse, error) {
+	if cfg.BunnyStreamLibraryID == "" || cfg.BunnyStreamAPIKey == "" {
+		return nil, fmt.Errorf("missing credentials")
+	}
+	statusURL := fmt.Sprintf("https://video.bunnycdn.com/library/%s/videos/%s", cfg.BunnyStreamLibraryID, videoID)
+	stReq, err := http.NewRequest("GET", statusURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	stReq.Header.Set("AccessKey", cfg.BunnyStreamAPIKey)
+	stReq.Header.Set("Accept", "application/json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	stResp, err := client.Do(stReq)
+	if err != nil {
+		return nil, err
+	}
+	defer stResp.Body.Close()
+
+	if stResp.StatusCode != 200 {
+		return nil, fmt.Errorf("Bunny Stream returned status %d", stResp.StatusCode)
+	}
+
+	var stData BunnyVideoStatusResponse
+	if err := json.NewDecoder(stResp.Body).Decode(&stData); err != nil {
+		return nil, err
+	}
+	return &stData, nil
+}
+
 func handleUpload(c *gin.Context) {
 	file, err := c.FormFile("video")
 	if err != nil {
 		c.JSON(400, gin.H{"error": "No video file provided"})
 		return
+	}
+
+	uploadID := c.PostForm("uploadId")
+	bunnyVideoID := c.PostForm("bunnyVideoId")
+	fingerprint := c.PostForm("fingerprint")
+
+	// 1. Search existing jobs for duplicate match
+	jobsMutex.RLock()
+	var existingJob *JobStatus
+	for _, j := range jobs {
+		if (uploadID != "" && j.UploadID == uploadID) ||
+			(bunnyVideoID != "" && j.BunnyVideoID == bunnyVideoID) ||
+			(fingerprint != "" && j.Fingerprint == fingerprint) {
+			existingJob = j
+			break
+		}
+	}
+	jobsMutex.RUnlock()
+
+	if existingJob != nil {
+		log.Printf("[Upload Duplicate Protection] Found existing job %s for uploadID=%s / bunnyVideoID=%s / fingerprint=%s", existingJob.ID, uploadID, bunnyVideoID, fingerprint)
+		if existingJob.Completed {
+			c.JSON(200, gin.H{
+				"jobId":         existingJob.ID,
+				"bunnyVideoId":  existingJob.BunnyVideoID,
+				"bunnyUploaded": true,
+				"completed":     true,
+				"result":        existingJob.Result,
+			})
+			return
+		}
+		if existingJob.BunnyUploaded && existingJob.BunnyVideoID != "" {
+			c.JSON(200, gin.H{
+				"jobId":         existingJob.ID,
+				"bunnyVideoId":  existingJob.BunnyVideoID,
+				"bunnyUploaded": true,
+				"stage":         existingJob.Stage,
+			})
+			return
+		}
+	}
+
+	// 2. If client supplied a bunnyVideoID, verify directly with Bunny Stream API
+	if bunnyVideoID != "" {
+		st, err := verifyBunnyVideo(bunnyVideoID)
+		if err == nil && st != nil && st.GUID != "" {
+			log.Printf("[Bunny Stream Verification] Confirmed existing video %s on Bunny Stream (Status=%d, EncodeProgress=%d)", bunnyVideoID, st.Status, st.EncodeProgress)
+			timestamp := time.Now().Unix()
+			ext := filepath.Ext(file.Filename)
+			if ext == "" {
+				ext = ".mp4"
+			}
+			renamedFilename := fmt.Sprintf("TG-@atoz_links-VID-%d%s", timestamp, ext)
+			jobID := fmt.Sprintf("%d-%s", timestamp, strings.ReplaceAll(file.Filename, " ", "_"))
+			if uploadID != "" {
+				jobID = uploadID
+			}
+
+			job := &JobStatus{
+				ID:               jobID,
+				UploadID:         uploadID,
+				BunnyVideoID:     bunnyVideoID,
+				BunnyUploaded:    true,
+				Fingerprint:      fingerprint,
+				Stage:            "Waiting for Bunny Stream Transcoding",
+				Progress:         25,
+				OriginalFilename: file.Filename,
+				RenamedFilename:  renamedFilename,
+				Timestamp:        timestamp,
+			}
+			setJob(jobID, job)
+
+			if st.Status == 4 || st.EncodeProgress == 100 || st.Status == 2 || st.Status == 3 {
+				go runPostUploadProcessingWithRetry(jobID, bunnyVideoID, file.Filename, renamedFilename, timestamp)
+			}
+
+			c.JSON(200, gin.H{
+				"jobId":         jobID,
+				"bunnyVideoId":  bunnyVideoID,
+				"bunnyUploaded": true,
+				"stage":         job.Stage,
+			})
+			return
+		}
 	}
 
 	timestamp := time.Now().Unix()
@@ -208,9 +338,15 @@ func handleUpload(c *gin.Context) {
 
 	renamedFilename := fmt.Sprintf("TG-@atoz_links-VID-%d%s", timestamp, ext)
 	jobID := fmt.Sprintf("%d-%s", timestamp, strings.ReplaceAll(file.Filename, " ", "_"))
+	if uploadID != "" {
+		jobID = uploadID
+	}
 
 	job := &JobStatus{
 		ID:               jobID,
+		UploadID:         uploadID,
+		BunnyVideoID:     bunnyVideoID,
+		Fingerprint:      fingerprint,
 		Stage:            "Uploading to Bunny Stream",
 		Progress:         5,
 		OriginalFilename: file.Filename,
@@ -282,49 +418,63 @@ func processBunnyWorkflow(jobID, tempPath, originalFilename, renamedFilename str
 	}
 
 	// STAGE 1: Uploading to Bunny Stream
+	log.Printf("[Job %s | Stage] Upload Started", jobID)
 	updateJob(jobID, "Uploading to Bunny Stream", 10, nil)
 
-	// 1a. Create Video Entry in Bunny Stream
-	createURL := fmt.Sprintf("https://video.bunnycdn.com/library/%s/videos", cfg.BunnyStreamLibraryID)
-	reqBody, _ := json.Marshal(map[string]string{"title": renamedFilename})
-	createReq, err := http.NewRequest("POST", createURL, bytes.NewBuffer(reqBody))
-	if err != nil {
-		updateJob(jobID, "Failed to create Bunny request", 10, err)
-		return
+	jobsMutex.RLock()
+	job, ok := jobs[jobID]
+	jobsMutex.RUnlock()
+
+	var videoID string
+	if ok && job != nil && job.BunnyVideoID != "" {
+		videoID = job.BunnyVideoID
+		log.Printf("[Job %s] Reusing existing Bunny Video ID: %s", jobID, videoID)
 	}
-	createReq.Header.Set("AccessKey", cfg.BunnyStreamAPIKey)
-	createReq.Header.Set("Content-Type", "application/json")
-	createReq.Header.Set("Accept", "application/json")
 
 	client := &http.Client{Timeout: 60 * time.Second}
-	createResp, err := client.Do(createReq)
-	if err != nil {
-		updateJob(jobID, "Failed to connect to Bunny Stream", 10, err)
-		return
-	}
-	defer createResp.Body.Close()
 
-	if createResp.StatusCode != 200 && createResp.StatusCode != 201 {
-		respBytes, _ := io.ReadAll(createResp.Body)
-		updateJob(jobID, "Failed creating video on Bunny", 10, fmt.Errorf("Bunny API error (HTTP %d): %s", createResp.StatusCode, string(respBytes)))
-		return
-	}
+	if videoID == "" {
+		// 1a. Create Video Entry in Bunny Stream
+		createURL := fmt.Sprintf("https://video.bunnycdn.com/library/%s/videos", cfg.BunnyStreamLibraryID)
+		reqBody, _ := json.Marshal(map[string]string{"title": renamedFilename})
+		createReq, err := http.NewRequest("POST", createURL, bytes.NewBuffer(reqBody))
+		if err != nil {
+			updateJob(jobID, "Failed to create Bunny request", 10, err)
+			return
+		}
+		createReq.Header.Set("AccessKey", cfg.BunnyStreamAPIKey)
+		createReq.Header.Set("Content-Type", "application/json")
+		createReq.Header.Set("Accept", "application/json")
 
-	var bunnyVid BunnyCreateVideoResponse
-	if err := json.NewDecoder(createResp.Body).Decode(&bunnyVid); err != nil || bunnyVid.GUID == "" {
-		updateJob(jobID, "Failed parsing Bunny response", 10, fmt.Errorf("invalid response from Bunny Stream video creation"))
-		return
-	}
+		createResp, err := client.Do(createReq)
+		if err != nil {
+			updateJob(jobID, "Failed to connect to Bunny Stream", 10, err)
+			return
+		}
+		defer createResp.Body.Close()
 
-	videoID := bunnyVid.GUID
-	log.Printf("[Job %s] Created Bunny Stream video GUID: %s", jobID, videoID)
+		if createResp.StatusCode != 200 && createResp.StatusCode != 201 {
+			respBytes, _ := io.ReadAll(createResp.Body)
+			updateJob(jobID, "Failed creating video on Bunny", 10, fmt.Errorf("Bunny API error (HTTP %d): %s", createResp.StatusCode, string(respBytes)))
+			return
+		}
 
-	// Store BunnyVideoID immediately
-	jobsMutex.Lock()
-	if j, ok := jobs[jobID]; ok {
-		j.BunnyVideoID = videoID
+		var bunnyVid BunnyCreateVideoResponse
+		if err := json.NewDecoder(createResp.Body).Decode(&bunnyVid); err != nil || bunnyVid.GUID == "" {
+			updateJob(jobID, "Failed parsing Bunny response", 10, fmt.Errorf("invalid response from Bunny Stream video creation"))
+			return
+		}
+
+		videoID = bunnyVid.GUID
+		log.Printf("[Job %s] Created Bunny Stream video GUID: %s", jobID, videoID)
+
+		// Store BunnyVideoID immediately
+		jobsMutex.Lock()
+		if j, ok := jobs[jobID]; ok {
+			j.BunnyVideoID = videoID
+		}
+		jobsMutex.Unlock()
 	}
-	jobsMutex.Unlock()
 
 	// 1b. Binary Upload to Bunny Stream
 	uploadURL := fmt.Sprintf("https://video.bunnycdn.com/library/%s/videos/%s", cfg.BunnyStreamLibraryID, videoID)
@@ -357,6 +507,7 @@ func processBunnyWorkflow(jobID, tempPath, originalFilename, renamedFilename str
 	}
 
 	// Bunny Upload Succeeded! Mark BunnyUploaded = true
+	log.Printf("[Job %s | Stage] Upload Confirmed by Bunny. Video ID: %s", jobID, videoID)
 	jobsMutex.Lock()
 	if j, ok := jobs[jobID]; ok {
 		j.BunnyUploaded = true
@@ -366,8 +517,6 @@ func processBunnyWorkflow(jobID, tempPath, originalFilename, renamedFilename str
 		j.Error = ""
 	}
 	jobsMutex.Unlock()
-
-	log.Printf("[Job %s] Upload to Bunny Stream succeeded! Video ID: %s", jobID, videoID)
 
 	// Continue post-upload processing with automatic retry logic
 	runPostUploadProcessingWithRetry(jobID, videoID, originalFilename, renamedFilename, timestamp)
