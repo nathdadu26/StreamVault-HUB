@@ -67,7 +67,7 @@ export function FilesManager() {
       name: file.name,
       sizeFormatted: (file.size / (1024 * 1024)).toFixed(1) + " MB",
       progress: 0,
-      step: "Uploading to Koyeb Server...",
+      step: "Uploading to Koyeb",
     }));
 
     setUploadQueue((prev) => [...prev, ...newQueueItems]);
@@ -91,9 +91,9 @@ export function FilesManager() {
       );
 
       refreshFiles();
-    } catch (err) {
+    } catch (err: any) {
       setUploadQueue((prev) =>
-        prev.map((q) => (q.id === item.id ? { ...q, step: "Failed", error: "Upload failed" } : q))
+        prev.map((q) => (q.id === item.id ? { ...q, step: "Failed", error: err.message || "Upload failed" } : q))
       );
     }
   };

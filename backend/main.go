@@ -33,18 +33,38 @@ type Config struct {
 
 var cfg Config
 
+type JobStatus struct {
+	ID        string   `json:"id"`
+	Stage     string   `json:"stage"`
+	Progress  int      `json:"progress"`
+	Error     string   `json:"error,omitempty"`
+	Result    *UploadResult `json:"result,omitempty"`
+	Completed bool     `json:"completed"`
+}
+
+type UploadResult struct {
+	Filename     string   `json:"filename"`
+	FileSize     string   `json:"fileSize"`
+	Duration     string   `json:"duration"`
+	ThumbnailURL string   `json:"thumbnailUrl"`
+	Thumbnails   []string `json:"thumbnails"`
+	VideoURL     string   `json:"videoUrl"`
+	UploadedAt   string   `json:"uploadedAt"`
+}
+
+var jobs = make(map[string]*JobStatus)
+
 func main() {
-	// Load config
+	// ... existing config ...
 	cfg = Config{
 		R2AccountID:       os.Getenv("CLOUDFLARE_ACCOUNT_ID"),
 		R2AccessKeyID:     os.Getenv("CLOUDFLARE_R2_ACCESS_KEY_ID"),
 		R2SecretAccessKey: os.Getenv("CLOUDFLARE_R2_SECRET_ACCESS_KEY"),
 		R2BucketName:      os.Getenv("CLOUDFLARE_R2_BUCKET_NAME"),
 		R2PublicURL:       os.Getenv("CLOUDFLARE_R2_PUBLIC_URL"),
-		FrontendAPIURL:    os.Getenv("VITE_FRONTEND_API_URL"), // Need this for worker
+		FrontendAPIURL:    os.Getenv("VITE_FRONTEND_API_URL"),
 	}
 
-	// Setup Gin
 	r := gin.Default()
 
 	// CORS
@@ -64,6 +84,15 @@ func main() {
 	})
 
 	r.POST("/upload", handleUpload)
+	r.GET("/upload/status/:id", func(c *gin.Context) {
+		id := c.Param("id")
+		job, ok := jobs[id]
+		if !ok {
+			c.JSON(404, gin.H{"error": "Job not found"})
+			return
+		}
+		c.JSON(200, job)
+	})
 
 	// Start Telegram Worker
 	go startTelegramWorker()
@@ -75,6 +104,20 @@ func main() {
 	r.Run(":" + port)
 }
 
+func updateJob(id, stage string, progress int, err error) {
+	if job, ok := jobs[id]; ok {
+		job.Stage = stage
+		job.Progress = progress
+		if err != nil {
+			job.Error = err.Error()
+			job.Completed = true
+			log.Printf("[Job %s] Error: %v", id, err)
+		} else {
+			log.Printf("[Job %s] Stage: %s (%d%%)", id, stage, progress)
+		}
+	}
+}
+
 func handleUpload(c *gin.Context) {
 	file, err := c.FormFile("video")
 	if err != nil {
@@ -84,66 +127,93 @@ func handleUpload(c *gin.Context) {
 
 	timestamp := time.Now().Unix()
 	ext := filepath.Ext(file.Filename)
-	originalName := strings.TrimSuffix(file.Filename, ext)
-	_ = originalName // Not used for now as per naming convention
+	jobID := fmt.Sprintf("%d-%s", timestamp, strings.ReplaceAll(file.Filename, " ", "_"))
 
-	// Naming convention: TG-@atoz_links-VID-{timestamp}.{extension}
-	tempFilename := fmt.Sprintf("temp-%d%s", timestamp, ext)
-	processedFilename := fmt.Sprintf("TG-@atoz_links-VID-%d.mp4", timestamp)
-	
-	tempPath := filepath.Join("uploads", tempFilename)
-	outputPath := filepath.Join("uploads", processedFilename)
+	jobs[jobID] = &JobStatus{
+		ID:       jobID,
+		Stage:    "Receiving file",
+		Progress: 10,
+	}
 
 	if err := os.MkdirAll("uploads", 0755); err != nil {
-		c.JSON(500, gin.H{"error": "Failed to create uploads dir"})
+		updateJob(jobID, "Failed to create uploads dir", 0, err)
+		c.JSON(500, gin.H{"error": "Internal server error"})
 		return
 	}
 
+	tempPath := filepath.Join("uploads", fmt.Sprintf("temp-%s", jobID))
 	if err := c.SaveUploadedFile(file, tempPath); err != nil {
-		c.JSON(500, gin.H{"error": "Failed to save temp file"})
+		updateJob(jobID, "Failed to save file", 0, err)
+		c.JSON(500, gin.H{"error": "Failed to save file"})
 		return
 	}
+
+	// Move to background processing
+	log.Printf("[Upload] Starting background processing for Job ID: %s", jobID)
+	go processUploadTask(jobID, tempPath, file.Filename, timestamp)
+
+	c.JSON(200, gin.H{"jobId": jobID})
+}
+
+func processUploadTask(jobID, tempPath, originalFilename string, timestamp int64) {
 	defer os.Remove(tempPath)
 
-	log.Printf("[Processing] Converting %s to MP4...", file.Filename)
-	// FFmpeg: Convert to MP4
+	// Stage 3: Renaming
+	updateJob(jobID, "Renaming file", 20, nil)
+	processedFilename := fmt.Sprintf("TG-@atoz_links-VID-%d.mp4", timestamp)
+	outputPath := filepath.Join("uploads", processedFilename)
+
+	// Stage 4: Detecting Format
+	updateJob(jobID, "Detecting format", 30, nil)
+	probeCmd := exec.Command("ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=codec_name", "-of", "default=noprint_wrappers=1:nokey=1", tempPath)
+	codec, _ := probeCmd.Output()
+	log.Printf("[Job %s] Detected codec: %s", jobID, strings.TrimSpace(string(codec)))
+
+	// Stage 5: Converting to MP4
+	updateJob(jobID, "Converting to MP4", 40, nil)
 	cmd := exec.Command("ffmpeg", "-i", tempPath, "-c:v", "libx264", "-crf", "23", "-preset", "fast", "-c:a", "aac", "-b:a", "128k", "-y", outputPath)
 	if err := cmd.Run(); err != nil {
-		log.Printf("FFmpeg conversion error: %v", err)
-		c.JSON(500, gin.H{"error": "Video processing failed"})
+		updateJob(jobID, "Conversion failed", 40, err)
 		return
 	}
 	defer os.Remove(outputPath)
 
-	log.Printf("[Processing] Generating thumbnails...")
-	// Generate 5 thumbnails
+	// Stage 6: Generating Thumbnails
+	updateJob(jobID, "Generating thumbnails", 60, nil)
 	thumbDir := filepath.Join("uploads", fmt.Sprintf("thumbs-%d", timestamp))
-	os.MkdirAll(thumbDir, 0755)
+	if err := os.MkdirAll(thumbDir, 0755); err != nil {
+		log.Printf("[Job %s] Failed to create thumb dir: %v", jobID, err)
+	}
 	defer os.RemoveAll(thumbDir)
 
-	thumbCmd := exec.Command("ffmpeg", "-i", outputPath, "-vf", "fps=5/duration,scale=640:360", "-q:v", "2", filepath.Join(thumbDir, "thumb-%d.jpg"))
-	if err := thumbCmd.Run(); err != nil {
-		log.Printf("Thumbnail generation error: %v", err)
+	// Generate thumbnails with seeking to avoid potential black frames at start
+	// -ss 00:00:01 skips the first second
+	thumbCmd := exec.Command("ffmpeg", "-ss", "00:00:01", "-i", outputPath, "-vf", "fps=5/duration,scale=640:360", "-frames:v", "5", "-q:v", "2", filepath.Join(thumbDir, "thumb-%d.jpg"))
+	if out, err := thumbCmd.CombinedOutput(); err != nil {
+		log.Printf("[Job %s] Thumbnail generation error: %v, Output: %s", jobID, err, string(out))
+		// Fallback without seeking if first attempt fails
+		fallbackCmd := exec.Command("ffmpeg", "-i", outputPath, "-vf", "fps=5/duration,scale=640:360", "-frames:v", "5", "-q:v", "2", filepath.Join(thumbDir, "thumb-%d.jpg"))
+		fallbackCmd.Run()
 	}
 
-	// Get Duration and Size
+	// Stats
 	durationStr := getDuration(outputPath)
 	fileInfo, _ := os.Stat(outputPath)
 	fileSizeMB := fmt.Sprintf("%.2f MB", float64(fileInfo.Size())/(1024*1024))
 
-	// Upload to R2
+	// Stage 7: Uploading video to Cloudflare R2
+	updateJob(jobID, "Uploading video to Cloudflare R2", 70, nil)
 	ctx := context.TODO()
 	s3Client := getS3Client()
-
-	log.Printf("[R2] Uploading video...")
 	videoKey := "videos/" + processedFilename
 	videoURL, err := uploadToR2(ctx, s3Client, outputPath, videoKey, "video/mp4")
 	if err != nil {
-		c.JSON(500, gin.H{"error": "R2 Upload failed"})
+		updateJob(jobID, "R2 Video upload failed", 70, err)
 		return
 	}
 
-	log.Printf("[R2] Uploading thumbnails...")
+	// Stage 8: Uploading thumbnails to Cloudflare R2
+	updateJob(jobID, "Uploading thumbnails to Cloudflare R2", 85, nil)
 	var thumbURLs []string
 	for i := 1; i <= 5; i++ {
 		thumbName := fmt.Sprintf("thumb-%d.jpg", i)
@@ -155,19 +225,28 @@ func handleUpload(c *gin.Context) {
 		}
 	}
 
-	c.JSON(200, gin.H{
-		"success": true,
-		"video": gin.H{
-			"filename":     processedFilename,
-			"fileSize":     fileSizeMB,
-			"duration":     durationStr,
-			"thumbnailUrl": thumbURLs[0],
-			"thumbnails":   thumbURLs,
-			"videoUrl":     videoURL,
-			"uploadedAt":   time.Now().Format(time.RFC3339),
-		},
-	})
+	// Stage 9: Returning upload result
+	updateJob(jobID, "Returning upload result", 95, nil)
+	
+	thumbnailURL := ""
+	if len(thumbURLs) > 0 {
+		thumbnailURL = thumbURLs[0]
+	}
+
+	if job, ok := jobs[jobID]; ok {
+		job.Completed = true
+		job.Result = &UploadResult{
+			Filename:     processedFilename,
+			FileSize:     fileSizeMB,
+			Duration:     durationStr,
+			ThumbnailURL: thumbnailURL,
+			Thumbnails:   thumbURLs,
+			VideoURL:     videoURL,
+			UploadedAt:   time.Now().Format(time.RFC3339),
+		}
+	}
 }
+
 
 func getDuration(path string) string {
 	cmd := exec.Command("ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", path)
@@ -197,10 +276,16 @@ func getS3Client() *s3.Client {
 }
 
 func uploadToR2(ctx context.Context, client *s3.Client, path, key, contentType string) (string, error) {
-	file, _ := os.Open(path)
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
 	defer file.Close()
 
-	_, err := client.PutObject(ctx, &s3.PutObjectInput{
+	stat, _ := file.Stat()
+	log.Printf("[R2] Uploading %s (%d bytes) to key %s...", path, stat.Size(), key)
+
+	_, err = client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:      aws.String(cfg.R2BucketName),
 		Key:         aws.String(key),
 		Body:        file,
@@ -208,10 +293,13 @@ func uploadToR2(ctx context.Context, client *s3.Client, path, key, contentType s
 	})
 
 	if err != nil {
+		log.Printf("[R2] Upload failed for %s: %v", key, err)
 		return "", err
 	}
 
-	return fmt.Sprintf("%s/%s", cfg.R2PublicURL, key), nil
+	url := fmt.Sprintf("%s/%s", cfg.R2PublicURL, key)
+	log.Printf("[R2] Successfully uploaded to %s", url)
+	return url, nil
 }
 
 // Telegram Worker
