@@ -188,11 +188,11 @@ func processUploadTask(jobID, tempPath, originalFilename string, timestamp int64
 
 	// Generate thumbnails with seeking to avoid potential black frames at start
 	// -ss 00:00:01 skips the first second
-	thumbCmd := exec.Command("ffmpeg", "-ss", "00:00:01", "-i", outputPath, "-vf", "fps=5/duration,scale=640:360", "-frames:v", "5", "-q:v", "2", filepath.Join(thumbDir, "thumb-%d.jpg"))
+	thumbCmd := exec.Command("ffmpeg", "-ss", "00:00:01", "-i", outputPath, "-vf", "thumbnail,scale=640:360", "-frames:v", "5", "-q:v", "2", filepath.Join(thumbDir, "thumb-%d.jpg"))
 	if out, err := thumbCmd.CombinedOutput(); err != nil {
 		log.Printf("[Job %s] Thumbnail generation error: %v, Output: %s", jobID, err, string(out))
-		// Fallback without seeking if first attempt fails
-		fallbackCmd := exec.Command("ffmpeg", "-i", outputPath, "-vf", "fps=5/duration,scale=640:360", "-frames:v", "5", "-q:v", "2", filepath.Join(thumbDir, "thumb-%d.jpg"))
+		// Fallback to simpler method if first attempt fails
+		fallbackCmd := exec.Command("ffmpeg", "-i", outputPath, "-vf", "scale=640:360", "-frames:v", "5", "-q:v", "2", filepath.Join(thumbDir, "thumb-%d.jpg"))
 		fallbackCmd.Run()
 	}
 
