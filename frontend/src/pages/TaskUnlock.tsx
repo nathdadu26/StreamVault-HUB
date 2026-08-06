@@ -8,7 +8,7 @@ import { Separator } from "@/components/ui/separator";
 import { MOCK_TASKS } from "../data/mock";
 import { motion, AnimatePresence } from "motion/react";
 import { useTaskSettings } from "../hooks/useTaskSettings";
-import { getVideoBySlug, extractSlugFromUrl, recordVisitor, getStoredVisitors } from "../lib/api";
+import { getVideoBySlug, extractSlugFromUrl, recordVisitor, checkLinkExpiration } from "../lib/api";
 import { Video } from "../types";
 
 export function TaskUnlock() {
@@ -45,7 +45,11 @@ export function TaskUnlock() {
           setIsVideoLoaded(true);
         }
       } else {
-        if (isMounted) setIsVideoLoaded(true);
+        if (isMounted) {
+          console.log(`[TaskUnlock] Record not found (empty/invalid slug)`);
+          setVideo(null);
+          setIsVideoLoaded(true);
+        }
       }
     }
     fetchVideo();
@@ -57,26 +61,16 @@ export function TaskUnlock() {
     if (isLoading) return;
     setIsCheckingSecurity(true);
 
-    // "Link Expired" must only appear after a successful D1 lookup when the configured link expiration time has actually expired.
-    if (currentVideo && settings.linkExpirationMinutes > 0) {
-      const visitors = getStoredVisitors();
-      const currentVisitor = visitors.find(v => v.slug === currentVideo.slug);
-      const referenceTime = currentVisitor 
-        ? new Date(currentVisitor.visitedAt).getTime() 
-        : new Date(currentVideo.uploadedAt).getTime();
-      const now = Date.now();
-      const diffMinutes = (now - referenceTime) / (1000 * 60);
-
-      if (!isNaN(referenceTime) && diffMinutes > settings.linkExpirationMinutes) {
-        console.log(`[TaskUnlock] Expiration check result: EXPIRED (Elapsed: ${diffMinutes.toFixed(1)}m > Limit: ${settings.linkExpirationMinutes}m)`);
+    if (currentVideo) {
+      const { isExpired, statusLog } = checkLinkExpiration(currentVideo, settings.linkExpirationMinutes);
+      console.log(`[TaskUnlock] ${statusLog}`);
+      if (isExpired) {
         setIsBlocked("expired");
         setIsCheckingSecurity(false);
         return;
-      } else {
-        console.log(`[TaskUnlock] Expiration check result: NOT EXPIRED (Elapsed: ${diffMinutes.toFixed(1)}m <= Limit: ${settings.linkExpirationMinutes}m)`);
       }
     } else {
-      console.log(`[TaskUnlock] Expiration check result: NOT EXPIRED or SKIPPED (Record found: ${!!currentVideo}, expiration setting: ${settings.linkExpirationMinutes}m)`);
+      console.log(`[TaskUnlock] Expiration check skipped (Record not found in D1)`);
     }
 
     // Check VPN/Proxy (if enabled)
@@ -203,7 +197,21 @@ export function TaskUnlock() {
     );
   }
 
-  const currentSlug = video ? video.slug : (slug || "sjhu4ld7_ndlksk_h");
+  if (isVideoLoaded && !video) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[500px] max-w-md mx-auto text-center space-y-6 animate-in fade-in zoom-in duration-500">
+        <div className="p-6 rounded-3xl border shadow-xl text-rose-500 bg-rose-500/10 border-rose-500/20 w-full">
+          <Icons.FileX className="h-12 w-12 mx-auto mb-4" />
+          <h2 className="text-2xl font-black mb-2">Video Not Found</h2>
+          <p className="text-sm font-medium opacity-80 leading-relaxed">
+            The requested video slug does not exist or has been removed from the database.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const currentSlug = video.slug;
 
   return (
     <div className="flex flex-col gap-10 w-full max-w-2xl mx-auto pb-20 animate-in fade-in slide-in-from-bottom-8 duration-1000">

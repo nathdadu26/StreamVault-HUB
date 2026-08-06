@@ -5,13 +5,17 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { getVideoBySlug, extractSlugFromUrl, recordVisitor } from "../lib/api";
+import { getVideoBySlug, extractSlugFromUrl, recordVisitor, checkLinkExpiration } from "../lib/api";
+import { useTaskSettings } from "../hooks/useTaskSettings";
 import { Video } from "../types";
 import { PlyrPlayer } from "../components/PlyrPlayer";
 
 export function VideoPlayer() {
   const { slug } = useParams<{ slug: string }>();
+  const { settings, isLoading: isLoadingSettings } = useTaskSettings();
   const [video, setVideo] = useState<Video | null>(null);
+  const [isVideoLoaded, setIsVideoLoaded] = useState(false);
+  const [isExpired, setIsExpired] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -25,35 +29,75 @@ export function VideoPlayer() {
           if (record) {
             console.log(`[VideoPlayer] Record found for slug "${cleanSlug}":`, record);
             setVideo(record);
+            const expResult = checkLinkExpiration(record, settings.linkExpirationMinutes);
+            console.log(`[VideoPlayer] ${expResult.statusLog}`);
+            setIsExpired(expResult.isExpired);
           } else {
             console.log(`[VideoPlayer] Record not found for slug "${cleanSlug}"`);
             setVideo(null);
           }
+          setIsVideoLoaded(true);
+        }
+      } else {
+        if (isMounted) {
+          console.log(`[VideoPlayer] Record not found (empty/invalid slug)`);
+          setVideo(null);
+          setIsVideoLoaded(true);
         }
       }
     }
-    fetchVideo();
+    if (!isLoadingSettings) {
+      fetchVideo();
+    }
     return () => { isMounted = false; };
-  }, [slug]);
+  }, [slug, isLoadingSettings, settings.linkExpirationMinutes]);
 
-  // Fallback if no video found
-  const displayVideo = video || {
-    id: "default",
-    slug: slug || "sjhu4ld7_ndlksk_h",
-    title: `Video (${slug || "Stream"})`,
-    videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=800&auto=format&fit=crop&q=60",
-    thumbnails: [],
-    fileSize: "145 MB",
-    duration: "03:45",
-    views: 124,
-    likes: 12,
-    dislikes: 0,
-    uploadedAt: new Date().toISOString(),
-    releaseYear: 2024,
-    genres: ["MP4", "HD"],
-    quality: "1080p",
-  };
+  if (isLoadingSettings || !isVideoLoaded) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
+        <Icons.Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
+        <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Loading Video...</p>
+      </div>
+    );
+  }
+
+  if (isExpired) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[500px] max-w-md mx-auto text-center space-y-6 animate-in fade-in zoom-in duration-500">
+        <div className="p-6 rounded-3xl border shadow-xl text-slate-500 bg-slate-500/10 border-slate-500/20 w-full">
+          <Icons.Clock className="h-12 w-12 mx-auto mb-4 text-slate-500" />
+          <h2 className="text-2xl font-black mb-2">Link Expired</h2>
+          <p className="text-sm font-medium opacity-80 leading-relaxed">
+            This video link has expired. Please go back to the source and generate a new link.
+          </p>
+        </div>
+        <Button 
+          variant="outline" 
+          onClick={() => window.location.reload()}
+          className="h-12 px-8 rounded-xl font-bold text-xs gap-2"
+        >
+          <Icons.RefreshCcw className="h-4 w-4" />
+          Try Again
+        </Button>
+      </div>
+    );
+  }
+
+  if (!video) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[500px] max-w-md mx-auto text-center space-y-6 animate-in fade-in zoom-in duration-500">
+        <div className="p-6 rounded-3xl border shadow-xl text-rose-500 bg-rose-500/10 border-rose-500/20 w-full">
+          <Icons.FileX className="h-12 w-12 mx-auto mb-4" />
+          <h2 className="text-2xl font-black mb-2">Video Not Found</h2>
+          <p className="text-sm font-medium opacity-80 leading-relaxed">
+            The requested video slug does not exist or has been removed from the database.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const displayVideo = video;
 
   return (
     <div className="flex flex-col gap-8 w-full max-w-4xl mx-auto pb-20 animate-in fade-in slide-in-from-bottom-8 duration-1000">

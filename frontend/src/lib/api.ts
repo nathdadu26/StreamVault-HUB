@@ -54,13 +54,68 @@ export function extractSlugFromUrl(rawSlugOrPath?: string): string {
   const parts = str.split("/").filter(Boolean);
   if (parts.length > 0) {
     const last = parts[parts.length - 1];
-    const reservedRoutes = ["ad", "s", "dl", "admin", "api", ""];
+    const reservedRoutes = ["ad", "s", "dl", "d", "admin", "admin_dashboard", "api", ""];
     if (reservedRoutes.includes(last.toLowerCase())) {
       return "";
     }
     return last;
   }
   return "";
+}
+
+export function parseDateString(str?: string): number {
+  if (!str) return NaN;
+  let formatted = str.trim();
+  if (formatted.includes(" ") && !formatted.includes("T")) {
+    formatted = formatted.replace(" ", "T") + "Z";
+  } else if (!formatted.endsWith("Z") && !formatted.includes("+") && !formatted.includes("-", 10)) {
+    formatted = formatted + "Z";
+  }
+  const t = new Date(formatted).getTime();
+  if (!isNaN(t)) return t;
+  return new Date(str).getTime();
+}
+
+export function checkLinkExpiration(
+  video: Video | null,
+  linkExpirationMinutes: number
+): { isExpired: boolean; elapsedMinutes: number; statusLog: string } {
+  if (!video) {
+    const statusLog = `[Expiration Check] Status: SKIPPED (Record not found in D1)`;
+    console.log(statusLog);
+    return { isExpired: false, elapsedMinutes: 0, statusLog };
+  }
+
+  if (!linkExpirationMinutes || linkExpirationMinutes <= 0) {
+    const statusLog = `[Expiration Check] Status: NOT EXPIRED (Expiration limit disabled or set to 0)`;
+    console.log(statusLog);
+    return { isExpired: false, elapsedMinutes: 0, statusLog };
+  }
+
+  const visitors = getStoredVisitors();
+  const currentVisitor = visitors.find((v) => v.slug === video.slug);
+
+  let referenceTime = currentVisitor ? parseDateString(currentVisitor.visitedAt) : NaN;
+  if (isNaN(referenceTime)) {
+    referenceTime = parseDateString(video.uploadedAt);
+  }
+
+  if (isNaN(referenceTime)) {
+    referenceTime = Date.now();
+  }
+
+  const now = Date.now();
+  const diffMinutes = Math.max(0, (now - referenceTime) / (1000 * 60));
+
+  if (diffMinutes > linkExpirationMinutes) {
+    const statusLog = `[Expiration Check] Status: EXPIRED (Elapsed: ${diffMinutes.toFixed(1)}m > Limit: ${linkExpirationMinutes}m)`;
+    console.log(statusLog);
+    return { isExpired: true, elapsedMinutes: diffMinutes, statusLog };
+  }
+
+  const statusLog = `[Expiration Check] Status: NOT EXPIRED (Elapsed: ${diffMinutes.toFixed(1)}m <= Limit: ${linkExpirationMinutes}m)`;
+  console.log(statusLog);
+  return { isExpired: false, elapsedMinutes: diffMinutes, statusLog };
 }
 
 export function formatVideoRecord(data: any): Video {
@@ -83,7 +138,7 @@ export function formatVideoRecord(data: any): Video {
     }
   }
 
-  const thumbnailUrl = data.thumbnailUrl || thumbnails[0] || data.thumbnail_1 || "";
+  const thumbnailUrl = data.thumbnailUrl || data.thumbnail_url || thumbnails[0] || data.thumbnail_1 || "";
 
   let mp4Qualities: Record<string, string> = {};
   if (data.mp4Qualities && typeof data.mp4Qualities === "object") {
@@ -103,7 +158,7 @@ export function formatVideoRecord(data: any): Video {
   if (data.video_360) mp4Qualities["360p"] = data.video_360;
   if (data.video_240) mp4Qualities["240p"] = data.video_240;
 
-  let videoUrl = data.videoUrl || "";
+  let videoUrl = data.videoUrl || data.video_url || "";
   if (!videoUrl) {
     const preferred = ["1080p", "720p", "480p", "360p", "240p", "280p", "mp4"];
     for (const q of preferred) {
@@ -131,12 +186,12 @@ export function formatVideoRecord(data: any): Video {
     videoUrl,
     thumbnailUrl,
     thumbnails,
-    fileSize: String(data.fileSize || "0 MB"),
+    fileSize: String(data.fileSize || data.file_size || "0 MB"),
     duration: String(data.duration || "00:00"),
     views: typeof data.views === "number" ? data.views : Number(data.views) || 0,
     likes: typeof data.likes === "number" ? data.likes : Number(data.likes) || 0,
     dislikes: typeof data.dislikes === "number" ? data.dislikes : Number(data.dislikes) || 0,
-    uploadedAt: String(data.uploadedAt || new Date().toISOString()),
+    uploadedAt: String(data.uploadedAt || data.uploaded_at || new Date().toISOString()),
     releaseYear: typeof data.releaseYear === "number" ? data.releaseYear : Number(data.releaseYear) || new Date().getFullYear(),
     genres,
     quality: String(data.quality || "1080p"),
@@ -149,7 +204,7 @@ export async function getVideoBySlug(rawSlug: string): Promise<Video | null> {
   console.log(`[Requested slug]: "${cleanSlug}" (raw input: "${rawSlug}")`);
 
   if (!cleanSlug) {
-    console.log(`[Record not found]: empty or invalid slug`);
+    console.log(`[D1 Lookup]: Record not found (empty or invalid slug)`);
     return null;
   }
 
@@ -160,25 +215,24 @@ export async function getVideoBySlug(rawSlug: string): Promise<Video | null> {
     if (res.ok && contentType.includes("application/json")) {
       const data = await res.json() as any;
       if (data && data.slug) {
-        console.log(`[Record found] in D1 for slug "${cleanSlug}":`, data);
+        console.log(`[SQL query result]: Record found in D1 for slug "${cleanSlug}"`, data);
         const formatted = formatVideoRecord(data);
         return formatted;
       } else {
-        console.log(`[Record not found] in D1 for slug "${cleanSlug}"`);
+        console.log(`[SQL query result]: Record not found in D1 for slug "${cleanSlug}"`);
       }
     } else if (res.ok) {
-      // Try parsing JSON safely if content-type header wasn't set or differs
       const text = await res.text();
       if (text && text.trim().startsWith("{")) {
         const data = JSON.parse(text);
         if (data && data.slug) {
-          console.log(`[Record found] in D1 for slug "${cleanSlug}":`, data);
+          console.log(`[SQL query result]: Record found in D1 for slug "${cleanSlug}"`, data);
           return formatVideoRecord(data);
         }
       }
-      console.log(`[SQL query result] Non-JSON response for slug "${cleanSlug}"`);
+      console.log(`[SQL query result]: Non-JSON response for slug "${cleanSlug}"`);
     } else {
-      console.log(`[SQL query result] Failed status ${res.status} for slug "${cleanSlug}"`);
+      console.log(`[SQL query result]: Failed status ${res.status} for slug "${cleanSlug}"`);
     }
   } catch (err) {
     console.error(`[SQL query error] for slug "${cleanSlug}":`, err);
@@ -188,11 +242,11 @@ export async function getVideoBySlug(rawSlug: string): Promise<Video | null> {
   const localFiles = getStoredFiles();
   const localMatch = localFiles.find((f) => f.slug === cleanSlug);
   if (localMatch) {
-    console.log(`[Record found in Local Storage] for slug "${cleanSlug}":`, localMatch);
+    console.log(`[SQL query result]: Record found in Local Storage for slug "${cleanSlug}"`, localMatch);
     return localMatch;
   }
 
-  console.log(`[Record not found] anywhere for slug "${cleanSlug}"`);
+  console.log(`[SQL query result]: Record not found anywhere for slug "${cleanSlug}"`);
   return null;
 }
 
@@ -266,7 +320,7 @@ export function recordVisitor(slug: string = ""): void {
     os,
     browser,
     country: "Direct Access",
-    visitedAt: new Date().toISOString().replace("T", " ").substring(0, 16),
+    visitedAt: new Date().toISOString(),
     totalLinksOpened: 1,
   };
 
