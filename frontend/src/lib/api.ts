@@ -118,6 +118,84 @@ export function checkLinkExpiration(
   return { isExpired: false, elapsedMinutes: diffMinutes, statusLog };
 }
 
+export interface VideoQualityOption {
+  quality: string;
+  url: string;
+}
+
+export function getAvailableQualities(video: Video | null): VideoQualityOption[] {
+  if (!video) return [];
+
+  const standardOrder = ["240p", "360p", "480p", "720p", "1080p"];
+  const found: VideoQualityOption[] = [];
+  const added = new Set<string>();
+
+  if (video.mp4Qualities && typeof video.mp4Qualities === "object") {
+    for (const q of standardOrder) {
+      if (video.mp4Qualities[q]) {
+        found.push({ quality: q, url: video.mp4Qualities[q] });
+        added.add(q);
+      }
+    }
+    for (const [q, u] of Object.entries(video.mp4Qualities)) {
+      if (u && !added.has(q)) {
+        found.push({ quality: q, url: u });
+        added.add(q);
+      }
+    }
+  }
+
+  if (found.length === 0 && video.videoUrl) {
+    const defaultQuality = video.quality || "1080p";
+    found.push({ quality: defaultQuality, url: video.videoUrl });
+  }
+
+  return found;
+}
+
+export async function generateSignedR2Url(
+  rawUrl: string,
+  title: string,
+  quality: string,
+  expirationMinutes: number
+): Promise<string> {
+  const validMinutes = expirationMinutes > 0 ? expirationMinutes : 10;
+  const expiresAt = Date.now() + validMinutes * 60 * 1000;
+  const secret = "atoz_r2_secret_key_2026";
+
+  const encoder = new TextEncoder();
+  const keyData = encoder.encode(secret);
+  const messageData = encoder.encode(`${rawUrl}:${expiresAt}`);
+
+  try {
+    const cryptoKey = await crypto.subtle.importKey(
+      "raw",
+      keyData,
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"]
+    );
+
+    const signatureBuffer = await crypto.subtle.sign("HMAC", cryptoKey, messageData);
+    const hashArray = Array.from(new Uint8Array(signatureBuffer));
+    const token = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+
+    const downloadEndpoint = `${window.location.origin}/api/download`;
+    const params = new URLSearchParams({
+      url: rawUrl,
+      title,
+      quality,
+      expires: String(expiresAt),
+      token,
+    });
+
+    return `${downloadEndpoint}?${params.toString()}`;
+  } catch (err) {
+    console.error("[generateSignedR2Url] HMAC signing failed:", err);
+    return rawUrl;
+  }
+}
+
 export function formatVideoRecord(data: any): Video {
   let thumbnails: string[] = [];
   if (Array.isArray(data.thumbnails)) {

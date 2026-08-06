@@ -19,14 +19,8 @@ export function Footer() {
             <span className="text-sm font-black tracking-tight text-foreground/80 uppercase">StreamVault</span>
           </div>
           <p className="text-[10px] font-black text-muted-foreground/40 uppercase tracking-[0.2em] text-center">
-            © {currentYear} Global Media Distribution • Secure Access Guaranteed
+            @StreamVaultHUB
           </p>
-        </div>
-        
-        <div className="flex items-center gap-8 text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">
-           <a href="#" className="hover:text-emerald-500 transition-colors">Privacy</a>
-           <a href="#" className="hover:text-emerald-500 transition-colors">Terms</a>
-           <a href="#" className="hover:text-emerald-500 transition-colors">Abuse</a>
         </div>
       </div>
     </footer>

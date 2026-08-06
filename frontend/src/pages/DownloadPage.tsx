@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { motion, AnimatePresence } from "motion/react";
 import { useTaskSettings } from "../hooks/useTaskSettings";
-import { getVideoBySlug, extractSlugFromUrl, recordVisitor, checkLinkExpiration } from "../lib/api";
+import { getVideoBySlug, extractSlugFromUrl, recordVisitor, checkLinkExpiration, getAvailableQualities, generateSignedR2Url } from "../lib/api";
 import { Video } from "../types";
 
 export function DownloadPage() {
@@ -17,6 +17,7 @@ export function DownloadPage() {
   const [isTaskCompleted, setIsTaskCompleted] = useState(false);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [timer, setTimer] = useState(0);
+  const [downloadingQuality, setDownloadingQuality] = useState<string | null>(null);
 
   // Security States
   const [isBlocked, setIsBlocked] = useState<"vpn" | "adblock" | "expired" | null>(null);
@@ -207,6 +208,33 @@ export function DownloadPage() {
   }
 
   const displayVideo = video;
+  const availableQualities = getAvailableQualities(displayVideo);
+
+  const handleDownloadQuality = async (targetUrl: string, quality: string) => {
+    if (!displayVideo) return;
+    setDownloadingQuality(quality);
+    try {
+      const expirationMinutes = settings.linkExpirationMinutes || 10;
+      const signedUrl = await generateSignedR2Url(
+        targetUrl,
+        displayVideo.title,
+        quality,
+        expirationMinutes
+      );
+      console.log(`[DownloadPage] Generating signed download link for quality "${quality}" with expiration ${expirationMinutes}m: ${signedUrl}`);
+
+      const a = document.createElement("a");
+      a.href = signedUrl;
+      a.download = `${displayVideo.title}_${quality}.mp4`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (err) {
+      console.error("Failed to generate signed download link:", err);
+    } finally {
+      setDownloadingQuality(null);
+    }
+  };
 
   return (
     <div className="flex flex-col gap-10 w-full max-w-4xl mx-auto pb-20 animate-in fade-in slide-in-from-bottom-8 duration-1000">
@@ -314,39 +342,61 @@ export function DownloadPage() {
                  </div>
 
                  <div className="pt-2">
-                    <Button 
-                      disabled={!isTaskCompleted}
-                      onClick={() => window.open(displayVideo.videoUrl, "_blank")}
-                      className={`w-full h-16 rounded-2xl text-lg font-black gap-3 transition-all duration-500 relative overflow-hidden ${
-                        isTaskCompleted 
-                        ? "bg-emerald-500 hover:bg-emerald-600 shadow-xl shadow-emerald-500/20 text-white border-none cursor-pointer" 
-                        : "bg-muted text-muted-foreground/40 border border-border/50"
-                      }`}
-                    >
-                       <AnimatePresence mode="wait">
-                          {isTaskCompleted ? (
-                             <motion.div 
-                                key="unlocked"
-                                initial={{ y: 10, opacity: 0 }}
-                                animate={{ y: 0, opacity: 1 }}
-                                className="flex items-center gap-3"
+                    <AnimatePresence mode="wait">
+                       {isTaskCompleted ? (
+                          <motion.div
+                             key="unlocked-qualities"
+                             initial={{ opacity: 0, y: 10 }}
+                             animate={{ opacity: 1, y: 0 }}
+                             exit={{ opacity: 0, y: -10 }}
+                             className="space-y-3"
+                          >
+                             <div className="flex items-center justify-between px-1">
+                                <span className="text-[10px] font-black uppercase tracking-widest text-emerald-500 flex items-center gap-1.5">
+                                   <Icons.CheckCircle2 className="h-3.5 w-3.5" />
+                                   Select Download Quality ({availableQualities.length})
+                                </span>
+                             </div>
+                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {availableQualities.map((item) => (
+                                   <Button
+                                      key={item.quality}
+                                      disabled={downloadingQuality === item.quality}
+                                      onClick={() => handleDownloadQuality(item.url, item.quality)}
+                                      className="h-14 rounded-2xl text-base font-black gap-2.5 bg-emerald-500 hover:bg-emerald-600 shadow-xl shadow-emerald-500/20 text-white border-none cursor-pointer transition-all active:scale-95"
+                                   >
+                                      {downloadingQuality === item.quality ? (
+                                         <>
+                                            <Icons.Loader2 className="h-5 w-5 animate-spin" />
+                                            <span>Preparing {item.quality.toUpperCase()}...</span>
+                                         </>
+                                      ) : (
+                                         <>
+                                            <Icons.Download className="h-5 w-5" />
+                                            <span>Download {item.quality.toUpperCase()}</span>
+                                         </>
+                                      )}
+                                   </Button>
+                                ))}
+                             </div>
+                          </motion.div>
+                       ) : (
+                          <motion.div
+                             key="locked-button"
+                             initial={{ opacity: 0, y: -10 }}
+                             animate={{ opacity: 1, y: 0 }}
+                             exit={{ opacity: 0, y: 10 }}
+                          >
+                             <Button
+                                disabled={true}
+                                className="w-full h-16 rounded-2xl text-lg font-black gap-3 bg-muted text-muted-foreground/40 border border-border/50 cursor-not-allowed"
                              >
-                               <Icons.Download className="h-6 w-6" />
-                               Start Download Now
-                             </motion.div>
-                          ) : (
-                             <motion.div 
-                                key="locked"
-                                initial={{ y: -10, opacity: 0 }}
-                                animate={{ y: 0, opacity: 1 }}
-                                className="flex items-center gap-3"
-                             >
-                               <Icons.Lock className="h-5 w-5 opacity-30" />
-                               Download Locked
-                             </motion.div>
-                          )}
-                       </AnimatePresence>
-                    </Button>
+                                <Icons.Lock className="h-5 w-5 opacity-30" />
+                                Download Locked
+                             </Button>
+                          </motion.div>
+                       )}
+                    </AnimatePresence>
                     <div className="mt-4 flex items-center justify-center gap-2 text-[10px] text-muted-foreground/60 uppercase font-black tracking-widest">
                       <Icons.ShieldCheck className="h-3 w-3 text-emerald-500" />
                       Encrypted & Secure Download

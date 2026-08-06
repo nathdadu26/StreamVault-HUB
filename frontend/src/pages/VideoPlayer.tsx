@@ -3,8 +3,8 @@ import { useParams, Link } from "react-router-dom";
 import { Icons } from "@/src/components/Icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { motion, AnimatePresence } from "motion/react";
 import { getVideoBySlug, extractSlugFromUrl, recordVisitor, checkLinkExpiration } from "../lib/api";
 import { useTaskSettings } from "../hooks/useTaskSettings";
 import { Video } from "../types";
@@ -16,6 +16,21 @@ export function VideoPlayer() {
   const [video, setVideo] = useState<Video | null>(null);
   const [isVideoLoaded, setIsVideoLoaded] = useState(false);
   const [isExpired, setIsExpired] = useState(false);
+  const [isCopied, setIsCopied] = useState(false);
+  const [showToast, setShowToast] = useState(false);
+
+  const handleCopyLink = () => {
+    if (!video) return;
+    const linkToCopy = `${window.location.origin}/ad/${video.slug}`;
+    navigator.clipboard.writeText(linkToCopy).then(() => {
+      setIsCopied(true);
+      setShowToast(true);
+      setTimeout(() => setIsCopied(false), 2000);
+      setTimeout(() => setShowToast(false), 3000);
+    }).catch((err) => {
+      console.error("Failed to copy link:", err);
+    });
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -156,28 +171,24 @@ export function VideoPlayer() {
                       Download Content
                    </Button>
                  </Link>
-                 <Button variant="outline" className="h-14 rounded-2xl gap-3 px-8 font-black text-base border-border/60 hover:bg-muted/50">
-                    <Icons.Shield className="h-5 w-5 rotate-45" />
-                    Report Issue
+                 <Button 
+                   variant="outline" 
+                   onClick={handleCopyLink}
+                   className="h-14 rounded-2xl gap-3 px-8 font-black text-base border-border/60 hover:bg-muted/50 transition-all active:scale-95"
+                 >
+                    {isCopied ? (
+                      <>
+                        <Icons.Check className="h-5 w-5 text-emerald-500" />
+                        Copied!
+                      </>
+                    ) : (
+                      <>
+                        <Icons.Copy className="h-5 w-5" />
+                        Copy Link
+                      </>
+                    )}
                  </Button>
               </div>
-
-              {/* Description Card */}
-              <Card className="border border-border/40 bg-muted/20 shadow-none rounded-2xl">
-                 <CardContent className="p-6">
-                    <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground/60 mb-3">About this video</h3>
-                    <p className="text-sm text-foreground/80 leading-relaxed font-medium">
-                       Enjoy high-quality streaming of your favorite content. This video has been processed and stored in Cloudflare D1 and R2 storage.
-                    </p>
-                    <div className="flex flex-wrap gap-2 mt-6">
-                       {displayVideo.genres.map((genre) => (
-                          <span key={genre} className="px-3 py-1.5 rounded-lg bg-card border border-border/40 text-[10px] font-black uppercase tracking-widest text-muted-foreground/80">
-                             {genre}
-                          </span>
-                       ))}
-                    </div>
-                 </CardContent>
-              </Card>
            </div>
 
            <div className="space-y-6">
@@ -194,6 +205,23 @@ export function VideoPlayer() {
            </div>
         </div>
       </div>
+
+      {/* Success Toast */}
+      <AnimatePresence>
+        {showToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            className="fixed bottom-6 right-6 z-50 flex items-center gap-3 bg-slate-900 text-white px-5 py-3.5 rounded-2xl shadow-2xl border border-white/10 text-xs font-bold"
+          >
+            <div className="h-6 w-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+              <Icons.Check className="h-3.5 w-3.5 stroke-[3px]" />
+            </div>
+            <span>Link copied.</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
