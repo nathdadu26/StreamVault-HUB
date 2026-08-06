@@ -351,38 +351,40 @@ export function DownloadPage() {
                              exit={{ opacity: 0, y: -10 }}
                              className="space-y-3"
                           >
-                             <div className="flex items-center justify-between px-1">
-                                <span className="text-[10px] font-black uppercase tracking-widest text-emerald-500 flex items-center gap-1.5">
-                                   <Icons.CheckCircle2 className="h-3.5 w-3.5" />
-                                   Select Download Quality ({availableQualities.length})
-                                </span>
-                             </div>
-                             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3.5 w-full">
-                                {availableQualities.map((item) => (
-                                   <Button
-                                      key={item.quality}
-                                      disabled={downloadingQuality === item.quality}
-                                      onClick={() => handleDownloadQuality(item.url, item.quality)}
-                                      className="w-full h-14 rounded-2xl text-xs sm:text-sm font-black bg-emerald-500 hover:bg-emerald-600 shadow-xl shadow-emerald-500/20 text-white border-none cursor-pointer transition-all active:scale-95 flex items-center justify-center text-center px-2 min-w-0 overflow-hidden"
-                                   >
-                                      {downloadingQuality === item.quality ? (
-                                         <div className="flex items-center justify-center gap-1.5 min-w-0 w-full text-center">
-                                            <Icons.Loader2 className="h-4 w-4 animate-spin shrink-0 text-white" />
-                                            <span className="truncate text-center font-black">
-                                               {item.quality.toUpperCase()}...
-                                            </span>
-                                         </div>
-                                      ) : (
-                                         <div className="flex items-center justify-center gap-1.5 min-w-0 w-full text-center">
-                                            <Icons.Download className="h-4 w-4 shrink-0 text-white" />
-                                            <span className="truncate text-center font-black">
-                                               DOWNLOAD {item.quality.toUpperCase()}
-                                            </span>
-                                         </div>
-                                      )}
-                                   </Button>
-                                ))}
-                             </div>
+                             <Card className="p-5 rounded-2xl bg-background border border-border/60 shadow-lg space-y-4">
+                                <div className="flex items-center justify-between px-1 border-b border-border/40 pb-3">
+                                   <span className="text-xs font-black uppercase tracking-widest text-emerald-500 flex items-center gap-2">
+                                      <Icons.CheckCircle2 className="h-4 w-4 shrink-0" />
+                                      Select Download Quality ({availableQualities.length})
+                                   </span>
+                                </div>
+                                <div className="flex flex-col gap-3 w-full">
+                                   {availableQualities.map((item) => (
+                                      <Button
+                                         key={item.quality}
+                                         disabled={downloadingQuality === item.quality}
+                                         onClick={() => handleDownloadQuality(item.url, item.quality)}
+                                         className="w-full h-14 rounded-xl text-sm font-black bg-emerald-500 hover:bg-emerald-600 shadow-md shadow-emerald-500/20 text-white border-none cursor-pointer transition-all active:scale-[0.99] flex items-center justify-center text-center px-4"
+                                      >
+                                         {downloadingQuality === item.quality ? (
+                                            <div className="flex items-center justify-center gap-2 min-w-0 w-full text-center">
+                                               <Icons.Loader2 className="h-4 w-4 animate-spin shrink-0 text-white" />
+                                               <span className="truncate text-center font-black">
+                                                  PREPARING {item.quality.toUpperCase()}...
+                                               </span>
+                                            </div>
+                                         ) : (
+                                            <div className="flex items-center justify-center gap-2 min-w-0 w-full text-center">
+                                               <Icons.Download className="h-4 w-4 shrink-0 text-white" />
+                                               <span className="truncate text-center font-black">
+                                                  ⬇ {item.quality.toUpperCase()}
+                                               </span>
+                                            </div>
+                                         )}
+                                      </Button>
+                                   ))}
+                                </div>
+                             </Card>
                           </motion.div>
                        ) : (
                           <motion.div

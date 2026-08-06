@@ -123,27 +123,60 @@ export interface VideoQualityOption {
   url: string;
 }
 
+export function cleanVideoTitle(rawTitle: string): string {
+  if (!rawTitle) return "Untitled Video";
+
+  let clean = rawTitle.trim();
+
+  // 1. Remove file extensions (.mp4, .mkv, .mov, .avi, .webm, .zip)
+  clean = clean.replace(/\.(mp4|mkv|mov|avi|webm|zip)$/i, "");
+
+  // 2. Remove preview_hq or preview terms
+  clean = clean.replace(/[-_]?(preview_hq|preview)[-_]?/gi, "");
+
+  // 3. Remove quality suffixes like _240p, _360p, _480p, _720p, _1080p, -240p, play_240p, etc.
+  clean = clean.replace(/[-_]?(play|quality)?[-_]?(240p|360p|480p|720p|1080p|2160p|4k)[-_]?/gi, "");
+
+  // 4. Clean leading/trailing spaces, underscores, or dashes
+  clean = clean.replace(/^[-_\s]+|[-_\s]+$/g, "").trim();
+
+  return clean || rawTitle;
+}
+
 export function getAvailableQualities(video: Video | null): VideoQualityOption[] {
   if (!video) return [];
 
   const standardOrder = ["240p", "360p", "480p", "720p", "1080p"];
   const found: VideoQualityOption[] = [];
-  const added = new Set<string>();
 
-  if (video.mp4Qualities && typeof video.mp4Qualities === "object") {
-    for (const q of standardOrder) {
-      const url = video.mp4Qualities[q];
-      if (url && typeof url === "string" && url.trim() !== "") {
-        found.push({ quality: q, url: url.trim() });
-        added.add(q);
+  let map: Record<string, string> = {};
+  if (typeof video.mp4Qualities === "string") {
+    try {
+      map = JSON.parse(video.mp4Qualities);
+    } catch {}
+  } else if (video.mp4Qualities && typeof video.mp4Qualities === "object") {
+    map = video.mp4Qualities as Record<string, string>;
+  }
+
+  for (const q of standardOrder) {
+    const url = map[q];
+    if (url && typeof url === "string" && url.trim() !== "") {
+      const lowerUrl = url.toLowerCase();
+      // Ignore preview_hq or preview files completely
+      if (lowerUrl.includes("preview_hq") || q.toLowerCase().includes("preview")) {
+        continue;
       }
+      found.push({ quality: q, url: url.trim() });
     }
   }
 
-  if (found.length === 0 && video.videoUrl) {
-    const rawQuality = video.quality ? video.quality.toLowerCase() : "";
-    const matchedQuality = standardOrder.find((q) => q === rawQuality) || "1080p";
-    found.push({ quality: matchedQuality, url: video.videoUrl.trim() });
+  if (found.length === 0 && video.videoUrl && typeof video.videoUrl === "string" && video.videoUrl.trim() !== "") {
+    const lowerVideoUrl = video.videoUrl.toLowerCase();
+    if (!lowerVideoUrl.includes("preview_hq")) {
+      const rawQuality = video.quality ? video.quality.toLowerCase() : "";
+      const matchedQuality = standardOrder.find((q) => q === rawQuality) || "1080p";
+      found.push({ quality: matchedQuality, url: video.videoUrl.trim() });
+    }
   }
 
   return found;

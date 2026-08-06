@@ -38,20 +38,45 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   try {
     const video = await context.request.json() as any;
 
-    let mp4QualitiesStr = "";
+    const rawTitle = video.title || "Untitled Video";
+    let cleanTitle = rawTitle.trim();
+    cleanTitle = cleanTitle.replace(/\.(mp4|mkv|mov|avi|webm|zip)$/i, "");
+    cleanTitle = cleanTitle.replace(/[-_]?(preview_hq|preview)[-_]?/gi, "");
+    cleanTitle = cleanTitle.replace(/[-_]?(play|quality)?[-_]?(240p|360p|480p|720p|1080p|2160p|4k)[-_]?/gi, "");
+    cleanTitle = cleanTitle.replace(/^[-_\s]+|[-_\s]+$/g, "").trim() || rawTitle;
+
+    let mp4QualitiesObj: Record<string, string> = {};
     if (typeof video.mp4Qualities === "string") {
-      mp4QualitiesStr = video.mp4Qualities;
-    } else if (video.mp4Qualities) {
-      mp4QualitiesStr = JSON.stringify(video.mp4Qualities);
-    } else {
-      mp4QualitiesStr = JSON.stringify({});
+      try {
+        mp4QualitiesObj = JSON.parse(video.mp4Qualities);
+      } catch {}
+    } else if (video.mp4Qualities && typeof video.mp4Qualities === "object") {
+      mp4QualitiesObj = video.mp4Qualities;
     }
 
-    const video_240 = video.video_240 || (video.mp4Qualities ? video.mp4Qualities["240p"] || video.mp4Qualities["280p"] : null) || null;
-    const video_360 = video.video_360 || (video.mp4Qualities ? video.mp4Qualities["360p"] : null) || null;
-    const video_480 = video.video_480 || (video.mp4Qualities ? video.mp4Qualities["480p"] : null) || null;
-    const video_720 = video.video_720 || (video.mp4Qualities ? video.mp4Qualities["720p"] : null) || null;
-    const video_1080 = video.video_1080 || (video.mp4Qualities ? video.mp4Qualities["1080p"] : null) || null;
+    const cleanQualities: Record<string, string> = {};
+    for (const [q, u] of Object.entries(mp4QualitiesObj)) {
+      if (!u || typeof u !== "string" || !u.trim()) continue;
+      const lowerQ = q.toLowerCase();
+      const lowerUrl = u.toLowerCase();
+      if (lowerQ.includes("preview") || lowerUrl.includes("preview_hq")) {
+        continue;
+      }
+      cleanQualities[q] = u.trim();
+    }
+
+    const mp4QualitiesStr = JSON.stringify(cleanQualities);
+
+    const video_240 = cleanQualities["240p"] || video.video_240 || null;
+    const video_360 = cleanQualities["360p"] || video.video_360 || null;
+    const video_480 = cleanQualities["480p"] || video.video_480 || null;
+    const video_720 = cleanQualities["720p"] || video.video_720 || null;
+    const video_1080 = cleanQualities["1080p"] || video.video_1080 || null;
+
+    let finalVideoUrl = video.videoUrl || "";
+    if (finalVideoUrl.toLowerCase().includes("preview_hq")) {
+      finalVideoUrl = video_1080 || video_720 || video_480 || video_360 || video_240 || "";
+    }
 
     const thumbnail_1 = video.thumbnail_1 || null;
     const thumbnail_2 = video.thumbnail_2 || null;
@@ -69,8 +94,8 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     ).bind(
       video.id,
       video.slug,
-      video.title,
-      video.videoUrl,
+      cleanTitle,
+      finalVideoUrl,
       video.thumbnailUrl,
       JSON.stringify(video.thumbnails || []),
       mp4QualitiesStr,

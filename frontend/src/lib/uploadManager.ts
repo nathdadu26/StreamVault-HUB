@@ -1,5 +1,5 @@
 import { ProcessingStep, Video } from "../types";
-import { getStoredFiles, saveStoredFiles, generateUniqueSlug, KOYEB_SERVER_URL } from "./api";
+import { getStoredFiles, saveStoredFiles, generateUniqueSlug, KOYEB_SERVER_URL, cleanVideoTitle } from "./api";
 import {
   StoredUploadItem,
   generateUUID,
@@ -423,11 +423,42 @@ class UploadManagerClass {
     const existing = getStoredFiles();
     const slug = videoData.slug || generateUniqueSlug(existing);
 
+    // Filter out preview_hq from mp4Qualities
+    const rawQualities = videoData.mp4Qualities || videoData.mp4_qualities || {};
+    let parsedQualities: Record<string, string> = {};
+    if (typeof rawQualities === "string") {
+      try {
+        parsedQualities = JSON.parse(rawQualities);
+      } catch {}
+    } else if (typeof rawQualities === "object") {
+      parsedQualities = rawQualities;
+    }
+
+    const cleanQualities: Record<string, string> = {};
+    for (const [q, url] of Object.entries(parsedQualities)) {
+      if (!url || typeof url !== "string" || !url.trim()) continue;
+      const lowerQ = q.toLowerCase();
+      const lowerUrl = url.toLowerCase();
+      if (lowerQ.includes("preview") || lowerUrl.includes("preview_hq")) {
+        console.log(`[UploadManager] Filtering out preview_hq file: key="${q}", url="${url}"`);
+        continue;
+      }
+      cleanQualities[q] = url.trim();
+    }
+
+    const rawTitle = videoData.title || fileName;
+    const finalTitle = cleanVideoTitle(rawTitle);
+
+    let finalVideoUrl = videoData.videoUrl || "";
+    if (finalVideoUrl.toLowerCase().includes("preview_hq")) {
+      finalVideoUrl = cleanQualities["1080p"] || cleanQualities["720p"] || cleanQualities["480p"] || cleanQualities["360p"] || cleanQualities["240p"] || "";
+    }
+
     const videoObject: Video = {
       ...videoData,
       id: videoData.id || `vid_${Date.now()}`,
       slug: slug,
-      title: videoData.title || fileName,
+      title: finalTitle,
       fileSize: videoData.fileSize || fileSizeFormatted,
       views: 0,
       likes: 0,
@@ -438,8 +469,8 @@ class UploadManagerClass {
       quality: videoData.quality || "1080p",
       thumbnailUrl: videoData.thumbnailUrl,
       thumbnails: videoData.thumbnails || (videoData.thumbnailUrl ? [videoData.thumbnailUrl] : []),
-      videoUrl: videoData.videoUrl,
-      mp4Qualities: videoData.mp4Qualities || videoData.mp4_qualities,
+      videoUrl: finalVideoUrl,
+      mp4Qualities: cleanQualities,
       uploadedAt: videoData.uploadedAt || videoData.created_at || new Date().toISOString(),
     };
 

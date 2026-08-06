@@ -152,7 +152,6 @@ function PlyrPlayerInternal({ src, poster, title, mp4Qualities }: PlyrPlayerProp
           "current-time",
           "duration",
           "mute",
-          "volume",
           "settings",
           "pip",
           "fullscreen",
