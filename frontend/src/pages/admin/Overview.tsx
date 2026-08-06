@@ -18,8 +18,18 @@ export function Overview() {
   const [files, setFiles] = useState<Video[]>([]);
   const [visitors, setVisitors] = useState<Visitor[]>([]);
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
+  const [backendStatus, setBackendStatus] = useState<"online" | "offline" | "checking">("checking");
 
   useEffect(() => {
+    // Check Backend Health
+    const KOYEB_URL = import.meta.env.VITE_KOYEB_PROCESSING_SERVER_URL;
+    if (KOYEB_URL) {
+      fetch(`${KOYEB_URL}/health`)
+        .then(res => res.ok ? setBackendStatus("online") : setBackendStatus("offline"))
+        .catch(() => setBackendStatus("offline"));
+    } else {
+      setBackendStatus("offline");
+    }
     // Load directly from D1 store
     const localFiles = getStoredFiles();
     const localVisitors = getStoredVisitors();
@@ -131,18 +141,23 @@ export function Overview() {
           { label: "Total Files", value: totalFiles.toString(), icon: Icons.FolderOpen },
           { label: "Total Views", value: totalViews > 1000 ? `${(totalViews / 1000).toFixed(1)}K` : totalViews.toString(), icon: Icons.Eye },
           { label: "Visitors", value: totalVisitorsCount.toString(), icon: Icons.Users },
-          { label: "Database Status", value: "D1 Connected", icon: Icons.ShieldCheck },
+          { 
+            label: "Backend Server", 
+            value: backendStatus === "online" ? "SYSTEM ONLINE" : backendStatus === "offline" ? "SYSTEM OFFLINE" : "CHECKING...", 
+            icon: Icons.ShieldCheck,
+            isOffline: backendStatus === "offline"
+          },
         ].map((stat, i) => (
-          <Card key={i} className="border bg-card shadow-sm hover:shadow-md transition-shadow">
+          <Card key={i} className={`border bg-card shadow-sm hover:shadow-md transition-shadow ${(stat as any).isOffline ? 'border-destructive/50 bg-destructive/5' : ''}`}>
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-4">
-                <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-500">
+                <div className={`p-2.5 rounded-xl ${(stat as any).isOffline ? 'bg-destructive/10 text-destructive' : 'bg-emerald-500/10 text-emerald-500'}`}>
                   <stat.icon className="h-5 w-5" />
                 </div>
               </div>
               <div className="space-y-1">
                 <p className="text-xs font-bold text-muted-foreground">{stat.label}</p>
-                <h3 className="text-2xl font-black text-foreground">{stat.value}</h3>
+                <h3 className={`text-2xl font-black ${(stat as any).isOffline ? 'text-destructive' : 'text-foreground'}`}>{stat.value}</h3>
               </div>
             </CardContent>
           </Card>

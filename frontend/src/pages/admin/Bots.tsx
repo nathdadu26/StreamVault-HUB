@@ -7,10 +7,12 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useTaskSettings } from "../../hooks/useTaskSettings";
+import { useBackendHealth } from "../../hooks/useBackendHealth";
 import { motion, AnimatePresence } from "motion/react";
 
 export function Bots() {
   const { settings, saveSettings, isLoading } = useTaskSettings();
+  const { isOnline } = useBackendHealth();
   const [localSettings, setLocalSettings] = useState(settings);
   const [status, setStatus] = useState<{ type: "success" | "error" | null; message: string }>({ type: null, message: "" });
 
@@ -39,6 +41,22 @@ export function Bots() {
 
   return (
     <div className="max-w-4xl space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
+      {/* SYSTEM OFFLINE BANNER */}
+      {!isOnline && (
+        <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-500 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-rose-500/10 flex items-center justify-center text-rose-500 shrink-0">
+              <Icons.AlertTriangle className="h-6 w-6" />
+            </div>
+            <div className="space-y-0.5">
+              <h4 className="text-sm font-black uppercase tracking-widest">SYSTEM OFFLINE</h4>
+              <p className="text-xs font-bold opacity-80">Telegram Auto-Posting is currently paused. Connect backend to resume.</p>
+            </div>
+          </div>
+          <Badge variant="destructive" className="font-black uppercase tracking-widest text-[9px] px-3 py-1">OFFLINE</Badge>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-foreground">Bot Management</h2>
         <AnimatePresence>

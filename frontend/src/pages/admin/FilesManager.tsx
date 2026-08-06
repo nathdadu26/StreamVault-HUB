@@ -163,8 +163,8 @@ export function FilesManager() {
                 Server Ready
               </Badge>
             ) : (
-              <Badge variant="destructive" className="text-xs font-bold">
-                Server Offline
+              <Badge variant="destructive" className="text-xs font-black uppercase tracking-wider px-3">
+                SYSTEM OFFLINE
               </Badge>
             )}
           </div>
@@ -202,7 +202,7 @@ export function FilesManager() {
                 {isOnline ? (
                   <>Drag & Drop video here or <span className="text-emerald-500 underline underline-offset-4">Click to Browse</span></>
                 ) : (
-                  <span className="text-muted-foreground">Upload Server Disconnected</span>
+                  <span className="text-muted-foreground uppercase tracking-widest font-black">SYSTEM OFFLINE</span>
                 )}
               </h3>
               <p className="text-xs text-muted-foreground font-medium">

@@ -5,20 +5,23 @@ This project is now split into two independent modules for production readiness.
 ## Structure
 
 - `/frontend`: React + Vite frontend for Cloudflare Pages.
-- `/backend`: Node.js + Express processing server for Koyeb (Docker).
+- `/backend`: Go (Golang) processing server for Koyeb (Docker).
 
 ## Deployment Steps
 
 ### 1. Backend (Koyeb)
 - Create a new service on Koyeb.
 - Choose "Docker" as the deployment method.
-- **Run Directory / Build Context**: Set this to `backend` (this is the directory where the Dockerfile is located).
+- **Build Context / Work Directory**: Set this to `backend`.
+- **Dockerfile Path**: Set this to `Dockerfile` (since it's inside the backend directory).
+- Alternatively, if using the root Dockerfile, set Build Context to `.` and Dockerfile path to `Dockerfile`.
 - Set the following Environment Variables in Koyeb:
   - `CLOUDFLARE_ACCOUNT_ID`
   - `CLOUDFLARE_R2_ACCESS_KEY_ID`
   - `CLOUDFLARE_R2_SECRET_ACCESS_KEY`
   - `CLOUDFLARE_R2_BUCKET_NAME`
   - `CLOUDFLARE_R2_PUBLIC_URL`
+  - `VITE_FRONTEND_API_URL`: Your Cloudflare Pages URL (e.g. `https://atoz-links.pages.dev`). This is required for the Telegram sync worker to fetch videos from D1.
 
 ### 2. Frontend (Cloudflare Pages)
 - Connect your GitHub repository to Cloudflare Pages.
