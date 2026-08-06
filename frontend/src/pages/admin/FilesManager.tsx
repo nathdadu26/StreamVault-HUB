@@ -34,16 +34,18 @@ export function FilesManager() {
   const [previewingVideo, setPreviewingVideo] = useState<Video | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { isOnline } = useBackendHealth();
 
-  const triggerToast = (message: string, type: "success" | "error") => {
+  const triggerToast = (message: string, type: "success" | "error" | "info") => {
     setToast({ message, type });
-    setTimeout(() => {
-      setToast(null);
-    }, 3500);
+    if (type !== "info") {
+      setTimeout(() => {
+        setToast((current) => (current?.message === message ? null : current));
+      }, 4000);
+    }
   };
 
   useEffect(() => {
@@ -103,17 +105,28 @@ export function FilesManager() {
 
   const handleDelete = async (id: string) => {
     const target = files.find((f) => f.id === id);
+    console.log(`[FilesManager Delete] Initiated delete for video ID: "${id}", Slug: "${target?.slug || 'N/A'}"`);
+
+    // Remove row from UI immediately
+    setFiles((prev) => prev.filter((f) => f.id !== id && (target ? f.slug !== target.slug : true)));
+
     setIsDeleting(true);
+    triggerToast("Deleting video from Cloudflare D1 and R2...", "info");
+
     try {
       const result = await deleteFile(id, target?.slug);
       if (result.success) {
-        setFiles((prev) => prev.filter((f) => f.id !== id && (target ? f.slug !== target.slug : true)));
+        console.log(`[FilesManager Delete] Successfully deleted video ID: "${id}"`);
         triggerToast("Video permanently deleted from Cloudflare D1 and R2.", "success");
       } else {
-        triggerToast(result.error || "Failed to delete video record.", "error");
+        console.error(`[FilesManager Delete] Delete failed for ID "${id}": ${result.error}`);
+        triggerToast(`Delete failed: ${result.error || "Failed to delete video record."}`, "error");
+        refreshFiles();
       }
     } catch (err: any) {
-      triggerToast("Unexpected error while deleting video.", "error");
+      console.error(`[FilesManager Delete] Exception caught during delete for ID "${id}":`, err);
+      triggerToast(`Unexpected error: ${err.message || "Failed to delete video."}`, "error");
+      refreshFiles();
     } finally {
       setIsDeleting(false);
       setDeleteConfirmId(null);
@@ -506,6 +519,10 @@ export function FilesManager() {
           {toast.type === "success" ? (
             <div className="h-6 w-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
               <Icons.Check className="h-3.5 w-3.5 stroke-[3px]" />
+            </div>
+          ) : toast.type === "info" ? (
+            <div className="h-6 w-6 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
+              <Icons.Loader2 className="h-3.5 w-3.5 animate-spin" />
             </div>
           ) : (
             <div className="h-6 w-6 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0">

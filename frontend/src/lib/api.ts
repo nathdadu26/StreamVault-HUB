@@ -353,28 +353,45 @@ export function updateFileThumbnail(id: string, newThumbnailUrl: string, title?:
 }
 
 export async function deleteFile(id: string, slug?: string): Promise<{ success: boolean; error?: string }> {
+  console.log(`[Delete Action] Step 1: Updating local storage state for ID: "${id}", Slug: "${slug || 'N/A'}"...`);
   const files = getStoredFiles();
   const filtered = files.filter((f) => f.id !== id && (slug ? f.slug !== slug : true));
   saveStoredFiles(filtered);
+  console.log(`[Delete Action] Step 1 Complete: Local storage updated. Items remaining: ${filtered.length}`);
+
+  const params = new URLSearchParams();
+  if (id) params.set("id", id);
+  if (slug) params.set("slug", slug);
+
+  const requestUrl = `/api/videos?${params.toString()}`;
+  console.log(`[Delete Action] Step 2: Calling Backend API: DELETE ${requestUrl}`);
 
   try {
-    const params = new URLSearchParams();
-    if (id) params.set("id", id);
-    if (slug) params.set("slug", slug);
-
-    const res = await fetch(`/api/videos?${params.toString()}`, {
+    const res = await fetch(requestUrl, {
       method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+      },
+      body: JSON.stringify({ id, slug }),
     });
 
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      throw new Error(errData.error || `Server responded with status ${res.status}`);
+    console.log(`[Delete Action] Step 3: API Response HTTP status: ${res.status} ${res.statusText}`);
+
+    const resData = await res.json().catch(() => ({}));
+
+    if (!res.ok || resData.success === false) {
+      const errMsg = resData.error || `Server error (HTTP ${res.status})`;
+      console.error(`[Delete Action] Step 3 Error: Backend deletion failed with message: "${errMsg}"`);
+      return { success: false, error: errMsg };
     }
 
+    console.log(`[Delete Action] Step 4 Complete: Cloudflare D1 record & R2 assets deleted successfully. Response:`, resData);
     return { success: true };
   } catch (err: any) {
-    console.error("[deleteFile Error]", err);
-    return { success: false, error: err.message || "Failed to delete video" };
+    const errorMsg = err.message || "Network error while connecting to Cloudflare Functions API";
+    console.error(`[Delete Action] Exception caught during API request:`, err);
+    return { success: false, error: errorMsg };
   }
 }
 

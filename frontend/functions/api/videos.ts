@@ -121,27 +121,33 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
 
 export const onRequestDelete: PagesFunction<Env> = async (context) => {
   const { DB } = context.env;
-  await ensureDatabaseSchema(DB);
-
-  const url = new URL(context.request.url);
-  let id = url.searchParams.get("id");
-  let slug = url.searchParams.get("slug");
-
-  if (!id && !slug) {
-    try {
-      const body = await context.request.json() as any;
-      if (body) {
-        id = body.id || id;
-        slug = body.slug || slug;
-      }
-    } catch {}
-  }
-
-  if (!id && !slug) {
-    return new Response(JSON.stringify({ error: "Missing video id or slug parameter" }), { status: 400 });
-  }
+  console.log("[API Delete] Received DELETE request at /api/videos");
 
   try {
+    console.log("[API Delete Step 1/4] Ensuring database schema and tables exist...");
+    await ensureDatabaseSchema(DB);
+    console.log("[API Delete Step 1/4 Complete] Database schema checked.");
+
+    const url = new URL(context.request.url);
+    let id = url.searchParams.get("id");
+    let slug = url.searchParams.get("slug");
+
+    if (!id && !slug) {
+      try {
+        const body = await context.request.json() as any;
+        if (body) {
+          id = body.id || id;
+          slug = body.slug || slug;
+        }
+      } catch {}
+    }
+
+    if (!id && !slug) {
+      console.error("[API Delete Error] Missing both 'id' and 'slug' parameters");
+      return new Response(JSON.stringify({ success: false, error: "Missing video id or slug parameter" }), { status: 400 });
+    }
+
+    console.log(`[API Delete Step 2/4] Resolving video record for ID: "${id || 'N/A'}", Slug: "${slug || 'N/A'}"...`);
     let videoRecord: any = null;
     if (id) {
       videoRecord = await DB.prepare("SELECT * FROM videos WHERE id = ? LIMIT 1").bind(id).first();
@@ -153,23 +159,38 @@ export const onRequestDelete: PagesFunction<Env> = async (context) => {
     const targetSlug = videoRecord?.slug || slug;
     const targetId = videoRecord?.id || id;
 
+    console.log(`[API Delete Step 2/4 Complete] Target resolved -> ID: "${targetId || 'N/A'}", Slug: "${targetSlug || 'N/A'}"`);
+
     // Delete related files from R2 slug folder if R2 binding exists
     const bucket = context.env.R2 || context.env.BUCKET || context.env.MY_BUCKET;
+    let deletedR2Count = 0;
+
     if (bucket && targetSlug) {
+      console.log(`[API Delete Step 3/4] Checking Cloudflare R2 bucket for slug folder: "${targetSlug}/"...`);
       try {
         const prefix = `${targetSlug}/`;
         const list = await bucket.list({ prefix });
         if (list && list.objects && list.objects.length > 0) {
+          console.log(`[API Delete Step 3/4] Found ${list.objects.length} R2 object(s) in '${prefix}' folder. Deleting...`);
           for (const obj of list.objects) {
+            console.log(`[R2 Delete] Removing key: ${obj.key}`);
             await bucket.delete(obj.key);
+            deletedR2Count++;
           }
+          console.log(`[API Delete Step 3/4 Complete] Successfully deleted ${deletedR2Count} object(s) from R2.`);
+        } else {
+          console.log(`[API Delete Step 3/4] No objects found in R2 folder '${prefix}'.`);
         }
-      } catch (r2Err) {
-        console.error("[R2 Delete Error]", r2Err);
+      } catch (r2Err: any) {
+        console.error("[API Delete Step 3/4 Error] R2 deletion failed:", r2Err);
+        throw new Error(`R2 asset deletion failed: ${r2Err.message || r2Err}`);
       }
+    } else {
+      console.log(`[API Delete Step 3/4] R2 bucket binding unavailable or no slug found, skipping R2 file deletion.`);
     }
 
     // Permanently delete from Cloudflare D1
+    console.log(`[API Delete Step 4/4] Permanently deleting record from Cloudflare D1 (ID: "${targetId}", Slug: "${targetSlug}")...`);
     if (targetId && targetSlug) {
       await DB.prepare("DELETE FROM videos WHERE id = ? OR slug = ?").bind(targetId, targetSlug).run();
     } else if (targetId) {
@@ -177,10 +198,18 @@ export const onRequestDelete: PagesFunction<Env> = async (context) => {
     } else if (targetSlug) {
       await DB.prepare("DELETE FROM videos WHERE slug = ?").bind(targetSlug).run();
     }
+    console.log(`[API Delete Step 4/4 Complete] Record permanently removed from Cloudflare D1.`);
 
-    return Response.json({ success: true, deletedId: targetId, deletedSlug: targetSlug });
+    return Response.json({
+      success: true,
+      message: "Video and all associated R2 assets permanently deleted.",
+      deletedId: targetId,
+      deletedSlug: targetSlug,
+      deletedR2Count
+    });
   } catch (err: any) {
-    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
+    console.error("[API Delete Error] Failed to complete delete request:", err);
+    return new Response(JSON.stringify({ success: false, error: err.message || "Failed to delete video" }), { status: 500 });
   }
 };
 
