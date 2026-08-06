@@ -6,13 +6,14 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { motion, AnimatePresence } from "motion/react";
 import { useTaskSettings } from "../hooks/useTaskSettings";
-import { getVideoBySlug, recordVisitor, getStoredVisitors } from "../lib/api";
+import { getVideoBySlug, extractSlugFromUrl, recordVisitor, getStoredVisitors } from "../lib/api";
 import { Video } from "../types";
 
 export function DownloadPage() {
   const { slug } = useParams<{ slug: string }>();
   const { settings, isLoading } = useTaskSettings();
   const [video, setVideo] = useState<Video | null>(null);
+  const [isVideoLoaded, setIsVideoLoaded] = useState(false);
   const [isTaskCompleted, setIsTaskCompleted] = useState(false);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [timer, setTimer] = useState(0);
@@ -21,25 +22,61 @@ export function DownloadPage() {
   const [isBlocked, setIsBlocked] = useState<"vpn" | "adblock" | "expired" | null>(null);
   const [isCheckingSecurity, setIsCheckingSecurity] = useState(true);
 
-  const checkSecurity = useCallback(async () => {
+  // 1. Fetch Video from D1
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchVideo() {
+      const cleanSlug = extractSlugFromUrl(slug);
+      console.log(`[DownloadPage] Requested slug: "${cleanSlug}"`);
+      if (cleanSlug) {
+        recordVisitor(cleanSlug);
+        const record = await getVideoBySlug(cleanSlug);
+        if (isMounted) {
+          if (record) {
+            console.log(`[DownloadPage] Record found for slug "${cleanSlug}":`, record);
+            setVideo(record);
+          } else {
+            console.log(`[DownloadPage] Record not found for slug "${cleanSlug}"`);
+            setVideo(null);
+          }
+          setIsVideoLoaded(true);
+        }
+      } else {
+        if (isMounted) setIsVideoLoaded(true);
+      }
+    }
+    fetchVideo();
+    return () => { isMounted = false; };
+  }, [slug]);
+
+  // 2. Security & Expiration Check (Link Expired ONLY after successful D1 lookup)
+  const checkSecurity = useCallback(async (currentVideo: Video | null) => {
     if (isLoading) return;
     setIsCheckingSecurity(true);
 
-    // 1. Check Link Expiration
-    const visitors = getStoredVisitors();
-    const currentVisitor = visitors.find(v => v.slug === slug);
-    if (currentVisitor && settings.linkExpirationMinutes > 0) {
-      const visitedAt = new Date(currentVisitor.visitedAt).getTime();
+    // "Link Expired" must only appear after a successful D1 lookup when the configured link expiration time has actually expired.
+    if (currentVideo && settings.linkExpirationMinutes > 0) {
+      const visitors = getStoredVisitors();
+      const currentVisitor = visitors.find(v => v.slug === currentVideo.slug);
+      const referenceTime = currentVisitor 
+        ? new Date(currentVisitor.visitedAt).getTime() 
+        : new Date(currentVideo.uploadedAt).getTime();
       const now = Date.now();
-      const diffMinutes = (now - visitedAt) / (1000 * 60);
-      if (diffMinutes > settings.linkExpirationMinutes) {
+      const diffMinutes = (now - referenceTime) / (1000 * 60);
+
+      if (!isNaN(referenceTime) && diffMinutes > settings.linkExpirationMinutes) {
+        console.log(`[DownloadPage] Expiration check result: EXPIRED (Elapsed: ${diffMinutes.toFixed(1)}m > Limit: ${settings.linkExpirationMinutes}m)`);
         setIsBlocked("expired");
         setIsCheckingSecurity(false);
         return;
+      } else {
+        console.log(`[DownloadPage] Expiration check result: NOT EXPIRED (Elapsed: ${diffMinutes.toFixed(1)}m <= Limit: ${settings.linkExpirationMinutes}m)`);
       }
+    } else {
+      console.log(`[DownloadPage] Expiration check result: NOT EXPIRED or SKIPPED (Record found: ${!!currentVideo}, expiration setting: ${settings.linkExpirationMinutes}m)`);
     }
 
-    // 2. Check VPN/Proxy (if enabled)
+    // Check VPN/Proxy (if enabled)
     if (settings.vpnDetectionEnabled) {
       try {
         const res = await fetch("https://ipapi.co/json/");
@@ -54,7 +91,7 @@ export function DownloadPage() {
       }
     }
 
-    // 3. Check AdBlock (if enabled)
+    // Check AdBlock (if enabled)
     if (settings.adBlockDetectionEnabled) {
       const adBlockEnabled = await new Promise<boolean>((resolve) => {
         const testAd = document.createElement("div");
@@ -81,30 +118,13 @@ export function DownloadPage() {
     }
 
     setIsCheckingSecurity(false);
-  }, [isLoading, settings, slug]);
+  }, [isLoading, settings]);
 
   useEffect(() => {
-    if (!isLoading) {
-      checkSecurity();
+    if (!isLoading && isVideoLoaded) {
+      checkSecurity(video);
     }
-  }, [isLoading, checkSecurity]);
-
-  useEffect(() => {
-    if (slug) {
-      recordVisitor(slug);
-      const found = getVideoBySlug(slug);
-      if (found) {
-        setVideo(found);
-      } else {
-        fetch(`/api/videos?slug=${encodeURIComponent(slug)}`)
-          .then((res) => (res.ok ? res.json() : null))
-          .then((data: any) => {
-            if (data && data.slug) setVideo(data);
-          })
-          .catch(() => {});
-      }
-    }
-  }, [slug]);
+  }, [isLoading, isVideoLoaded, video, checkSecurity]);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;

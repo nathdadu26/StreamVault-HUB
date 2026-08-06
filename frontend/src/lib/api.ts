@@ -40,9 +40,160 @@ export function saveStoredFiles(files: Video[]): void {
   localStorage.setItem(STORAGE_FILES_KEY, JSON.stringify(files));
 }
 
-export function getVideoBySlug(slug: string): Video | undefined {
-  const files = getStoredFiles();
-  return files.find((f) => f.slug === slug);
+export function extractSlugFromUrl(rawSlugOrPath?: string): string {
+  let str = rawSlugOrPath || "";
+  if (!str && typeof window !== "undefined") {
+    str = window.location.pathname;
+  }
+  if (!str) return "";
+
+  // Strip query strings and hashes
+  str = str.split("?")[0].split("#")[0].trim();
+
+  // Extract last path component e.g. /ad/ribmlz8mpnxagz00pc -> ribmlz8mpnxagz00pc
+  const parts = str.split("/").filter(Boolean);
+  if (parts.length > 0) {
+    const last = parts[parts.length - 1];
+    const reservedRoutes = ["ad", "s", "dl", "admin", "api", ""];
+    if (reservedRoutes.includes(last.toLowerCase())) {
+      return "";
+    }
+    return last;
+  }
+  return "";
+}
+
+export function formatVideoRecord(data: any): Video {
+  let thumbnails: string[] = [];
+  if (Array.isArray(data.thumbnails)) {
+    thumbnails = data.thumbnails;
+  } else if (typeof data.thumbnails === "string") {
+    try {
+      const parsed = JSON.parse(data.thumbnails);
+      if (Array.isArray(parsed)) thumbnails = parsed;
+    } catch {
+      thumbnails = [];
+    }
+  }
+
+  const thumbCols = [data.thumbnail_1, data.thumbnail_2, data.thumbnail_3, data.thumbnail_4, data.thumbnail_5];
+  for (const t of thumbCols) {
+    if (t && typeof t === "string" && !thumbnails.includes(t)) {
+      thumbnails.push(t);
+    }
+  }
+
+  const thumbnailUrl = data.thumbnailUrl || thumbnails[0] || data.thumbnail_1 || "";
+
+  let mp4Qualities: Record<string, string> = {};
+  if (data.mp4Qualities && typeof data.mp4Qualities === "object") {
+    mp4Qualities = { ...data.mp4Qualities };
+  } else if (typeof data.mp4Qualities === "string") {
+    try {
+      const parsed = JSON.parse(data.mp4Qualities);
+      if (typeof parsed === "object" && parsed !== null) {
+        mp4Qualities = parsed;
+      }
+    } catch {}
+  }
+
+  if (data.video_1080) mp4Qualities["1080p"] = data.video_1080;
+  if (data.video_720) mp4Qualities["720p"] = data.video_720;
+  if (data.video_480) mp4Qualities["480p"] = data.video_480;
+  if (data.video_360) mp4Qualities["360p"] = data.video_360;
+  if (data.video_240) mp4Qualities["240p"] = data.video_240;
+
+  let videoUrl = data.videoUrl || "";
+  if (!videoUrl) {
+    const preferred = ["1080p", "720p", "480p", "360p", "240p", "280p", "mp4"];
+    for (const q of preferred) {
+      if (mp4Qualities[q]) {
+        videoUrl = mp4Qualities[q];
+        break;
+      }
+    }
+  }
+
+  let genres: string[] = ["MP4", "HD"];
+  if (Array.isArray(data.genres)) {
+    genres = data.genres;
+  } else if (typeof data.genres === "string") {
+    try {
+      const parsed = JSON.parse(data.genres);
+      if (Array.isArray(parsed)) genres = parsed;
+    } catch {}
+  }
+
+  return {
+    id: String(data.id || ""),
+    slug: String(data.slug || ""),
+    title: String(data.title || "Untitled Video"),
+    videoUrl,
+    thumbnailUrl,
+    thumbnails,
+    fileSize: String(data.fileSize || "0 MB"),
+    duration: String(data.duration || "00:00"),
+    views: typeof data.views === "number" ? data.views : Number(data.views) || 0,
+    likes: typeof data.likes === "number" ? data.likes : Number(data.likes) || 0,
+    dislikes: typeof data.dislikes === "number" ? data.dislikes : Number(data.dislikes) || 0,
+    uploadedAt: String(data.uploadedAt || new Date().toISOString()),
+    releaseYear: typeof data.releaseYear === "number" ? data.releaseYear : Number(data.releaseYear) || new Date().getFullYear(),
+    genres,
+    quality: String(data.quality || "1080p"),
+    mp4Qualities,
+  };
+}
+
+export async function getVideoBySlug(rawSlug: string): Promise<Video | null> {
+  const cleanSlug = extractSlugFromUrl(rawSlug);
+  console.log(`[Requested slug]: "${cleanSlug}" (raw input: "${rawSlug}")`);
+
+  if (!cleanSlug) {
+    console.log(`[Record not found]: empty or invalid slug`);
+    return null;
+  }
+
+  try {
+    const res = await fetch(`/api/videos?slug=${encodeURIComponent(cleanSlug)}`);
+    console.log(`[SQL query result] HTTP status: ${res.status}`);
+    const contentType = res.headers.get("content-type") || "";
+    if (res.ok && contentType.includes("application/json")) {
+      const data = await res.json() as any;
+      if (data && data.slug) {
+        console.log(`[Record found] in D1 for slug "${cleanSlug}":`, data);
+        const formatted = formatVideoRecord(data);
+        return formatted;
+      } else {
+        console.log(`[Record not found] in D1 for slug "${cleanSlug}"`);
+      }
+    } else if (res.ok) {
+      // Try parsing JSON safely if content-type header wasn't set or differs
+      const text = await res.text();
+      if (text && text.trim().startsWith("{")) {
+        const data = JSON.parse(text);
+        if (data && data.slug) {
+          console.log(`[Record found] in D1 for slug "${cleanSlug}":`, data);
+          return formatVideoRecord(data);
+        }
+      }
+      console.log(`[SQL query result] Non-JSON response for slug "${cleanSlug}"`);
+    } else {
+      console.log(`[SQL query result] Failed status ${res.status} for slug "${cleanSlug}"`);
+    }
+  } catch (err) {
+    console.error(`[SQL query error] for slug "${cleanSlug}":`, err);
+  }
+
+  // Fallback to local storage
+  const localFiles = getStoredFiles();
+  const localMatch = localFiles.find((f) => f.slug === cleanSlug);
+  if (localMatch) {
+    console.log(`[Record found in Local Storage] for slug "${cleanSlug}":`, localMatch);
+    return localMatch;
+  }
+
+  console.log(`[Record not found] anywhere for slug "${cleanSlug}"`);
+  return null;
 }
 
 export function updateFileThumbnail(id: string, newThumbnailUrl: string, title?: string): Video[] {

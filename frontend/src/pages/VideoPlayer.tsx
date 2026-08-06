@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { getVideoBySlug, getStoredFiles, recordVisitor } from "../lib/api";
+import { getVideoBySlug, extractSlugFromUrl, recordVisitor } from "../lib/api";
 import { Video } from "../types";
 import { PlyrPlayer } from "../components/PlyrPlayer";
 
@@ -14,20 +14,26 @@ export function VideoPlayer() {
   const [video, setVideo] = useState<Video | null>(null);
 
   useEffect(() => {
-    if (slug) {
-      recordVisitor(slug);
-      const found = getVideoBySlug(slug);
-      if (found) {
-        setVideo(found);
-      } else {
-        fetch(`/api/videos?slug=${encodeURIComponent(slug)}`)
-          .then((res) => (res.ok ? res.json() : null))
-          .then((data: any) => {
-            if (data && data.slug) setVideo(data);
-          })
-          .catch(() => {});
+    let isMounted = true;
+    async function fetchVideo() {
+      const cleanSlug = extractSlugFromUrl(slug);
+      console.log(`[VideoPlayer] Requested slug: "${cleanSlug}"`);
+      if (cleanSlug) {
+        recordVisitor(cleanSlug);
+        const record = await getVideoBySlug(cleanSlug);
+        if (isMounted) {
+          if (record) {
+            console.log(`[VideoPlayer] Record found for slug "${cleanSlug}":`, record);
+            setVideo(record);
+          } else {
+            console.log(`[VideoPlayer] Record not found for slug "${cleanSlug}"`);
+            setVideo(null);
+          }
+        }
       }
     }
+    fetchVideo();
+    return () => { isMounted = false; };
   }, [slug]);
 
   // Fallback if no video found

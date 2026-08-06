@@ -11,8 +11,15 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
 
   try {
     if (slug) {
+      console.log(`[D1 Query] Requested slug: "${slug}"`);
       const result = await DB.prepare("SELECT * FROM videos WHERE slug = ? LIMIT 1").bind(slug).first();
-      return Response.json(result || {});
+      console.log(`[D1 Query] SQL query result for "${slug}":`, result ? "Record found" : "Record not found");
+      if (result) {
+        console.log(`[D1 Query] Record found:`, JSON.stringify(result));
+      } else {
+        console.log(`[D1 Query] Record not found for slug: "${slug}"`);
+      }
+      return Response.json(result || null);
     }
     if (pending === "true") {
       const { results } = await DB.prepare("SELECT * FROM videos WHERE telegramPosted = 0 ORDER BY uploadedAt ASC").all();
