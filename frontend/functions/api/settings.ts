@@ -23,18 +23,19 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     // Simple upsert logic for D1
     await DB.prepare("DELETE FROM settings").run();
     await DB.prepare(
-      "INSERT INTO settings (task1Url, task2Url, downloadTaskUrl, vpnDetectionEnabled, adBlockDetectionEnabled, linkExpirationMinutes, telegramBotToken, telegramPostInterval, telegramPostUnit, telegramChannelUrl) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO settings (task1Url, task2Url, downloadTaskUrl, vpnDetectionEnabled, adBlockDetectionEnabled, linkExpirationMinutes, telegramBotToken, telegramPostInterval, telegramPostUnit, telegramPostQuantity, telegramChannelUrl) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     ).bind(
-      settings.task1Url,
-      settings.task2Url,
-      settings.downloadTaskUrl,
+      settings.task1Url || "",
+      settings.task2Url || "",
+      settings.downloadTaskUrl || "",
       settings.vpnDetectionEnabled ? 1 : 0,
       settings.adBlockDetectionEnabled ? 1 : 0,
-      settings.linkExpirationMinutes,
-      settings.telegramBotToken,
-      settings.telegramPostInterval,
-      settings.telegramPostUnit,
-      settings.telegramChannelUrl
+      settings.linkExpirationMinutes || 30,
+      settings.telegramBotToken || "",
+      settings.telegramPostInterval || 30,
+      settings.telegramPostUnit || "minutes",
+      settings.telegramPostQuantity || 1,
+      settings.telegramChannelUrl || ""
     ).run();
     return Response.json({ success: true });
   } catch (err: any) {

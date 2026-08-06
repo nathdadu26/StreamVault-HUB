@@ -22,6 +22,16 @@ export interface Video {
   mp4Qualities?: Record<string, string>;
 }
 
+export interface TelegramChannel {
+  id: string;
+  channelId: string;
+  channelName: string;
+  enabled: boolean;
+  totalSuccess: number;
+  totalFailed: number;
+  createdAt?: string;
+}
+
 export interface TaskSettings {
   task1Url: string;
   task2Url: string;
@@ -32,6 +42,7 @@ export interface TaskSettings {
   telegramBotToken: string;
   telegramPostInterval: number;
   telegramPostUnit: "minutes" | "hours";
+  telegramPostQuantity: number;
   telegramChannelUrl: string;
 }
 

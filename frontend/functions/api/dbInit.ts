@@ -109,6 +109,7 @@ export async function ensureDatabaseSchema(DB: any) {
       telegramBotToken: "TEXT",
       telegramPostInterval: "INTEGER DEFAULT 30",
       telegramPostUnit: "TEXT DEFAULT 'minutes'",
+      telegramPostQuantity: "INTEGER DEFAULT 1",
       telegramChannelUrl: "TEXT",
     };
 
@@ -122,6 +123,19 @@ export async function ensureDatabaseSchema(DB: any) {
         }
       }
     }
+
+    // 2b. Ensure 'telegram_channels' table
+    await DB.prepare(`
+      CREATE TABLE IF NOT EXISTS telegram_channels (
+        id TEXT PRIMARY KEY,
+        channel_id TEXT UNIQUE,
+        channel_name TEXT,
+        enabled INTEGER DEFAULT 1,
+        total_success INTEGER DEFAULT 0,
+        total_failed INTEGER DEFAULT 0,
+        created_at TEXT
+      )
+    `).run().catch((e: any) => console.error("[dbInit] Error creating telegram_channels table:", e));
 
     // 3. Ensure 'visitors' table
     await DB.prepare(`

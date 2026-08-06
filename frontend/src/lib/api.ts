@@ -489,6 +489,7 @@ export function getStoredSettings(): TaskSettings {
     telegramBotToken: "",
     telegramPostInterval: 30,
     telegramPostUnit: "minutes",
+    telegramPostQuantity: 1,
     telegramChannelUrl: "",
   };
 
@@ -509,6 +510,154 @@ export function saveStoredSettings(settings: TaskSettings): void {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(settings),
   }).catch(() => {});
+}
+
+// Telegram Channels Persistence & D1 API
+const STORAGE_CHANNELS_KEY = "streamvault_telegram_channels";
+
+export function getStoredChannels(): import("../types").TelegramChannel[] {
+  const data = localStorage.getItem(STORAGE_CHANNELS_KEY);
+  if (!data) return [];
+  try {
+    return JSON.parse(data);
+  } catch {
+    return [];
+  }
+}
+
+export function saveStoredChannels(channels: import("../types").TelegramChannel[]): void {
+  localStorage.setItem(STORAGE_CHANNELS_KEY, JSON.stringify(channels));
+}
+
+export async function fetchTelegramChannels(): Promise<import("../types").TelegramChannel[]> {
+  try {
+    const res = await fetch("/api/telegram");
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        saveStoredChannels(data);
+        return data;
+      }
+    }
+  } catch (e) {
+    console.error("[fetchTelegramChannels] Error:", e);
+  }
+  return getStoredChannels();
+}
+
+export async function saveTelegramChannel(channel: { id?: string; channelId: string; channelName: string; enabled?: boolean; totalSuccess?: number; totalFailed?: number }): Promise<import("../types").TelegramChannel[]> {
+  const existing = getStoredChannels();
+  const index = existing.findIndex((c) => c.channelId === channel.channelId || (channel.id && c.id === channel.id));
+  let updated: import("../types").TelegramChannel[];
+
+  if (index >= 0) {
+    updated = [...existing];
+    updated[index] = {
+      ...updated[index],
+      channelId: channel.channelId,
+      channelName: channel.channelName,
+      enabled: channel.enabled !== undefined ? channel.enabled : updated[index].enabled,
+    };
+  } else {
+    const newChan: import("../types").TelegramChannel = {
+      id: channel.id || `chan_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      channelId: channel.channelId,
+      channelName: channel.channelName,
+      enabled: channel.enabled !== undefined ? channel.enabled : true,
+      totalSuccess: channel.totalSuccess || 0,
+      totalFailed: channel.totalFailed || 0,
+      createdAt: new Date().toISOString(),
+    };
+    updated = [newChan, ...existing];
+  }
+
+  saveStoredChannels(updated);
+
+  try {
+    await fetch("/api/telegram", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(channel),
+    });
+  } catch (e) {
+    console.error("[saveTelegramChannel] D1 sync error:", e);
+  }
+
+  return updated;
+}
+
+export async function deleteTelegramChannel(idOrChannelId: string): Promise<import("../types").TelegramChannel[]> {
+  const existing = getStoredChannels();
+  const updated = existing.filter((c) => c.id !== idOrChannelId && c.channelId !== idOrChannelId);
+  saveStoredChannels(updated);
+
+  try {
+    await fetch(`/api/telegram?id=${encodeURIComponent(idOrChannelId)}`, {
+      method: "DELETE",
+    });
+  } catch (e) {
+    console.error("[deleteTelegramChannel] D1 sync error:", e);
+  }
+
+  return updated;
+}
+
+export async function toggleTelegramChannel(idOrChannelId: string): Promise<import("../types").TelegramChannel[]> {
+  const existing = getStoredChannels();
+  const updated = existing.map((c) => {
+    if (c.id === idOrChannelId || c.channelId === idOrChannelId) {
+      return { ...c, enabled: !c.enabled };
+    }
+    return c;
+  });
+  saveStoredChannels(updated);
+
+  const target = updated.find((c) => c.id === idOrChannelId || c.channelId === idOrChannelId);
+  if (target) {
+    try {
+      await fetch("/api/telegram", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: target.id, channelId: target.channelId, enabled: target.enabled }),
+      });
+    } catch (e) {
+      console.error("[toggleTelegramChannel] D1 sync error:", e);
+    }
+  }
+
+  return updated;
+}
+
+export async function recordTelegramPostResult(idOrChannelId: string, success: boolean): Promise<import("../types").TelegramChannel[]> {
+  const existing = getStoredChannels();
+  const updated = existing.map((c) => {
+    if (c.id === idOrChannelId || c.channelId === idOrChannelId) {
+      return {
+        ...c,
+        totalSuccess: success ? c.totalSuccess + 1 : c.totalSuccess,
+        totalFailed: !success ? c.totalFailed + 1 : c.totalFailed,
+      };
+    }
+    return c;
+  });
+  saveStoredChannels(updated);
+
+  try {
+    await fetch("/api/telegram", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: idOrChannelId,
+        channelId: idOrChannelId,
+        incrementSuccess: success,
+        incrementFailed: !success,
+      }),
+    });
+  } catch (e) {
+    console.error("[recordTelegramPostResult] D1 sync error:", e);
+  }
+
+  return updated;
 }
 
 // Generate 5 real image thumbnails from a Video file element using canvas
