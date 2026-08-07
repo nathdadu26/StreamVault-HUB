@@ -3,6 +3,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+export type ProcessingStep = 
+  | "queued" 
+  | "uploading" 
+  | "extracting" 
+  | "analyzing" 
+  | "completed" 
+  | "failed" 
+  | "Uploading to Bunny Stream" 
+  | "Waiting for Bunny Stream Transcoding" 
+  | "Completed" 
+  | "Failed";
+
 export interface Video {
   id: string;
   slug: string;

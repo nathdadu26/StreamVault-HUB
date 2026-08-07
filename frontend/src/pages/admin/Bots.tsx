@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Component, ErrorInfo, ReactNode } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Icons } from "@/src/components/Icons";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useTaskSettings } from "../../hooks/useTaskSettings";
 import { motion, AnimatePresence } from "motion/react";
-import { TelegramChannel } from "../../types";
+import { TelegramChannel, TaskSettings } from "../../types";
 import {
   fetchTelegramChannels,
   saveTelegramChannel,
@@ -18,8 +18,79 @@ import {
   KOYEB_SERVER_URL,
 } from "../../lib/api";
 
-export function Bots() {
-  const { settings, saveSettings, isLoading } = useTaskSettings();
+// --- Error Boundary ---
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class BotsErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  public state: ErrorBoundaryState = {
+    hasError: false,
+    error: null
+  };
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error("[BotsErrorBoundary] Caught error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-12 text-center bg-rose-500/5 border border-rose-500/20 rounded-3xl space-y-4">
+          <div className="h-16 w-16 bg-rose-500/10 text-rose-500 rounded-2xl flex items-center justify-center mx-auto">
+            {Icons?.AlertTriangle ? <Icons.AlertTriangle className="h-8 w-8" /> : <span>⚠️</span>}
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-rose-600">Bots Menu Error</h2>
+            <p className="text-sm text-muted-foreground mt-1 max-w-md mx-auto">
+              A runtime error occurred in the Telegram Automation module.
+            </p>
+          </div>
+          <div className="p-4 bg-background border border-border/40 rounded-xl text-left overflow-auto max-h-40">
+            <code className="text-[10px] text-rose-500 font-mono whitespace-pre">
+              {this.state.error?.stack || this.state.error?.message}
+            </code>
+          </div>
+          <Button 
+            onClick={() => window.location.reload()} 
+            className="bg-rose-500 hover:bg-rose-600 text-white rounded-xl px-8"
+          >
+            Reset Module
+          </Button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function BotsContent() {
+  const { settings: rawSettings, saveSettings, isLoading } = useTaskSettings();
+  
+  // Ensure settings are NEVER undefined
+  const settings: TaskSettings = rawSettings || {
+    task1Url: "",
+    task2Url: "",
+    downloadTaskUrl: "",
+    vpnDetectionEnabled: false,
+    adBlockDetectionEnabled: false,
+    linkExpirationMinutes: 30,
+    telegramBotToken: "",
+    telegramPostInterval: 30,
+    telegramPostUnit: "minutes",
+    telegramPostQuantity: 1,
+    telegramChannelUrl: "",
+  };
+
   const [channels, setChannels] = useState<TelegramChannel[]>([]);
   const [intervalVal, setIntervalVal] = useState<number>(30);
   const [intervalUnit, setIntervalUnit] = useState<"minutes" | "hours">("minutes");
@@ -51,8 +122,13 @@ export function Bots() {
   }, []);
 
   const loadChannels = async () => {
-    const list = await fetchTelegramChannels();
-    setChannels(list);
+    try {
+      const list = await fetchTelegramChannels();
+      setChannels(Array.isArray(list) ? list : []);
+    } catch (err) {
+      console.error("[Bots] loadChannels error:", err);
+      setChannels([]);
+    }
   };
 
   const showStatus = (type: "success" | "error" | "info", message: string) => {
@@ -99,58 +175,69 @@ export function Bots() {
     const cleanName = newChanName.trim() || `Channel ${cleanId}`;
 
     // Check duplicate
-    if (channels.some((c) => c.channelId === cleanId)) {
+    if (Array.isArray(channels) && channels.some((c) => c?.channelId === cleanId)) {
       showStatus("error", `Channel ${cleanId} already exists!`);
       return;
     }
 
-    const updated = await saveTelegramChannel({
-      channelId: cleanId,
-      channelName: cleanName,
-      enabled: true,
-      totalSuccess: 0,
-      totalFailed: 0,
-    });
-    setChannels(updated);
-    setNewChanName("");
-    setNewChanId("");
-    setIsAdding(false);
-    showStatus("success", `Channel "${cleanName}" added successfully.`);
+    try {
+      const updated = await saveTelegramChannel({
+        channelId: cleanId,
+        channelName: cleanName,
+        enabled: true,
+        totalSuccess: 0,
+        totalFailed: 0,
+      });
+      setChannels(Array.isArray(updated) ? updated : []);
+      setNewChanName("");
+      setNewChanId("");
+      setIsAdding(false);
+      showStatus("success", `Channel "${cleanName}" added successfully.`);
+    } catch (err: any) {
+      showStatus("error", "Failed to add channel: " + err.message);
+    }
   };
 
   // 4. Toggle Channel
   const handleToggle = async (channelId: string) => {
-    const updated = await toggleTelegramChannel(channelId);
-    setChannels(updated);
-    const target = updated.find((c) => c.channelId === channelId || c.id === channelId);
-    if (target) {
-      showStatus("info", `Channel "${target.channelName}" ${target.enabled ? "Enabled" : "Disabled"}.`);
+    try {
+      const updated = await toggleTelegramChannel(channelId);
+      setChannels(Array.isArray(updated) ? updated : []);
+      const target = updated?.find((c) => c?.channelId === channelId || c?.id === channelId);
+      if (target) {
+        showStatus("info", `Channel "${target.channelName}" ${target.enabled ? "Enabled" : "Disabled"}.`);
+      }
+    } catch (err: any) {
+      showStatus("error", "Failed to toggle: " + err.message);
     }
   };
 
   // 5. Remove Channel
   const handleRemove = async (channelId: string) => {
-    const updated = await deleteTelegramChannel(channelId);
-    setChannels(updated);
-    showStatus("success", "Channel removed.");
+    try {
+      const updated = await deleteTelegramChannel(channelId);
+      setChannels(Array.isArray(updated) ? updated : []);
+      showStatus("success", "Channel removed.");
+    } catch (err: any) {
+      showStatus("error", "Failed to remove: " + err.message);
+    }
   };
 
-  // 6. Posting Workflow: Single channel or All enabled channels
+  // 6. Posting Workflow
   const runPostingWorkflowForChannel = async (channel: TelegramChannel, qty: number) => {
-    const videos = getStoredFiles();
+    if (!channel) return { successCount: 0, failCount: 0 };
+    const videos = getStoredFiles() || [];
     let successCount = 0;
     let failCount = 0;
 
     for (let i = 1; i <= qty; i++) {
       setPostingProgress(`[${channel.channelName}] Sending Post ${i} of ${qty}...`);
       
-      // Simulate/Trigger Post logic
       try {
-        const videoToPost = videos[Math.floor(Math.random() * videos.length)];
-        const botToken = settings.telegramBotToken || "ENV_BOT_TOKEN";
+        const videoToPost = videos.length > 0 ? videos[Math.floor(Math.random() * videos.length)] : null;
+        const botToken = settings.telegramBotToken;
 
-        if (botToken && botToken !== "ENV_BOT_TOKEN" && videoToPost) {
-          // Send via Telegram Bot API
+        if (botToken && botToken.length > 5 && videoToPost) {
           const caption = `🎬 <b>${videoToPost.title || "New Media"}</b>\n\n📺 Watch & Download:\n${window.location.origin}/s/${videoToPost.slug}`;
           const photoUrl = videoToPost.thumbnailUrl;
 
@@ -171,27 +258,25 @@ export function Bots() {
           if (res.ok) {
             successCount++;
             const updated = await recordTelegramPostResult(channel.channelId, true);
-            setChannels(updated);
+            setChannels(Array.isArray(updated) ? updated : []);
           } else {
             failCount++;
             const updated = await recordTelegramPostResult(channel.channelId, false);
-            setChannels(updated);
+            setChannels(Array.isArray(updated) ? updated : []);
           }
         } else {
-          // Record success if in demo/ENV mode
+          // Demo mode or missing token/video
           successCount++;
           const updated = await recordTelegramPostResult(channel.channelId, true);
-          setChannels(updated);
+          setChannels(Array.isArray(updated) ? updated : []);
         }
       } catch (err) {
         failCount++;
-        const updated = await recordTelegramPostResult(channel.channelId, false);
-        setChannels(updated);
+        await recordTelegramPostResult(channel.channelId, false).catch(() => {});
       }
 
-      // 5-second delay between posts if not last post
       if (i < qty) {
-        setPostingProgress(`[${channel.channelName}] Waiting 5s before post ${i + 1}...`);
+        setPostingProgress(`[${channel.channelName}] Waiting 5s...`);
         await new Promise((resolve) => setTimeout(resolve, 5000));
       }
     }
@@ -200,16 +285,16 @@ export function Bots() {
   };
 
   const handlePostNow = async (channel: TelegramChannel) => {
-    if (isPosting) return;
+    if (isPosting || !channel) return;
     setIsPosting(true);
     const qty = Math.max(1, Math.min(20, postQuantity));
     
     try {
-      showStatus("info", `Starting post workflow for "${channel.channelName}" (${qty} post${qty > 1 ? "s" : ""})...`);
+      showStatus("info", `Starting post to "${channel.channelName}"...`);
       const res = await runPostingWorkflowForChannel(channel, qty);
-      showStatus("success", `Completed posting to "${channel.channelName}": ${res.successCount} success, ${res.failCount} failed.`);
+      showStatus("success", `Done: ${res.successCount} OK, ${res.failCount} Failed.`);
     } catch (err: any) {
-      showStatus("error", `Posting failed: ${err.message || "Unknown error"}`);
+      showStatus("error", `Failed: ${err.message}`);
     } finally {
       setIsPosting(false);
       setPostingProgress("");
@@ -217,9 +302,9 @@ export function Bots() {
   };
 
   const handleRunAllWorkflow = async () => {
-    const enabledChannels = channels.filter((c) => c.enabled);
+    const enabledChannels = (channels || []).filter((c) => c?.enabled);
     if (enabledChannels.length === 0) {
-      showStatus("error", "No enabled channels available to post.");
+      showStatus("error", "No enabled channels.");
       return;
     }
 
@@ -228,18 +313,15 @@ export function Bots() {
     const qty = Math.max(1, Math.min(20, postQuantity));
 
     try {
-      showStatus("info", `Starting sequential posting for ${enabledChannels.length} enabled channel(s)...`);
-      
-      // Process sequentially: Channel A completely, then Channel B, etc.
+      showStatus("info", `Starting workflow for ${enabledChannels.length} channel(s)...`);
       for (let idx = 0; idx < enabledChannels.length; idx++) {
         const chan = enabledChannels[idx];
-        setPostingProgress(`Processing Channel ${idx + 1}/${enabledChannels.length}: ${chan.channelName}`);
+        setPostingProgress(`Channel ${idx + 1}/${enabledChannels.length}: ${chan.channelName}`);
         await runPostingWorkflowForChannel(chan, qty);
       }
-
-      showStatus("success", "All channel posting workflows completed!");
+      showStatus("success", "Automation workflow complete!");
     } catch (err: any) {
-      showStatus("error", `Workflow execution error: ${err.message || "Unknown error"}`);
+      showStatus("error", "Workflow error: " + err.message);
     } finally {
       setIsPosting(false);
       setPostingProgress("");
@@ -248,11 +330,22 @@ export function Bots() {
 
   const webhookUrl = `${KOYEB_SERVER_URL || window.location.origin}/api/telegram/webhook`;
 
-  if (isLoading) return null;
+  if (isLoading) return (
+    <div className="flex flex-col items-center justify-center p-24 space-y-4">
+      <Icons.RefreshCw className="h-10 w-10 text-sky-500 animate-spin" />
+      <p className="text-sm font-bold text-muted-foreground">Initializing Bots Engine...</p>
+    </div>
+  );
+
+  // Safe Icons access
+  const TelegramIcon = Icons?.Telegram || Icons?.Bot || (() => null);
+  const InfoIcon = Icons?.Info || (() => null);
+  const ClockIcon = Icons?.Clock || (() => null);
+  const LayersIcon = Icons?.Layers || (() => null);
+  const RefreshIcon = Icons?.RefreshCw || (() => null);
 
   return (
     <div className="max-w-4xl space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold text-foreground">Telegram Automation</h2>
@@ -266,11 +359,9 @@ export function Bots() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               className={`text-xs font-bold px-4 py-2 rounded-xl border ${
-                status.type === "success"
-                  ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
-                  : status.type === "error"
-                  ? "bg-rose-500/10 text-rose-500 border-rose-500/20"
-                  : "bg-sky-500/10 text-sky-500 border-sky-500/20"
+                status.type === "success" ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : 
+                status.type === "error" ? "bg-rose-500/10 text-rose-500 border-rose-500/20" : 
+                "bg-sky-500/10 text-sky-500 border-sky-500/20"
               }`}
             >
               {status.message}
@@ -279,7 +370,6 @@ export function Bots() {
         </AnimatePresence>
       </div>
 
-      {/* Progress banner when workflow is active */}
       {isPosting && (
         <motion.div
           initial={{ opacity: 0, scale: 0.98 }}
@@ -288,34 +378,29 @@ export function Bots() {
         >
           <div className="flex items-center gap-3">
             <div className="h-8 w-8 rounded-xl bg-emerald-500/20 text-emerald-500 flex items-center justify-center animate-spin">
-              <Icons.RefreshCw className="h-4 w-4" />
+              <RefreshIcon className="h-4 w-4" />
             </div>
             <div>
-              <p className="text-xs font-bold text-emerald-600">Posting Workflow In Progress</p>
+              <p className="text-xs font-bold text-emerald-600">Workflow Active</p>
               <p className="text-[11px] text-muted-foreground font-medium">{postingProgress}</p>
             </div>
           </div>
-          <Badge className="bg-emerald-500 text-white font-bold text-[10px] animate-pulse">5s Interval Active</Badge>
+          <Badge className="bg-emerald-500 text-white font-bold text-[10px] animate-pulse">Running</Badge>
         </motion.div>
       )}
 
       <div className="grid grid-cols-1 gap-8">
-        {/* Telegram Bot Card */}
         <Card className="border border-border/40 bg-card shadow-sm rounded-2xl">
           <CardHeader className="border-b border-border/40 bg-muted/20 py-4 px-6">
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="text-sm font-bold text-foreground flex items-center gap-2">
-                  <Icons.Telegram className="h-4 w-4 text-sky-500" />
+                  <TelegramIcon className="h-4 w-4 text-sky-500" />
                   Telegram Bot Status
                 </CardTitle>
-                <CardDescription className="text-xs text-muted-foreground">
-                  Token provided via ENV & Webhook Endpoint
-                </CardDescription>
+                <CardDescription className="text-xs text-muted-foreground">Token provided via ENV</CardDescription>
               </div>
-              <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 px-3 py-1 font-bold text-[10px]">
-                ENV Configured
-              </Badge>
+              <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 px-3 py-1 font-bold text-[10px]">Active</Badge>
             </div>
           </CardHeader>
           <CardContent className="p-6 space-y-4">
@@ -323,40 +408,33 @@ export function Bots() {
               <div className="p-4 rounded-xl bg-muted/20 border border-border/40 space-y-1">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Bot Token</span>
                 <p className="text-xs font-mono font-bold text-emerald-600 truncate">
-                  {settings.telegramBotToken ? `${settings.telegramBotToken.substring(0, 10)}...` : "Provided via TELEGRAM_BOT_TOKEN ENV"}
+                  {settings.telegramBotToken ? `${settings.telegramBotToken.substring(0, 10)}...` : "Using TELEGRAM_BOT_TOKEN ENV"}
                 </p>
               </div>
-
               <div className="p-4 rounded-xl bg-muted/20 border border-border/40 space-y-1">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Webhook Endpoint</span>
-                <p className="text-xs font-mono text-sky-600 truncate" title={webhookUrl}>
-                  {webhookUrl}
-                </p>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Webhook</span>
+                <p className="text-xs font-mono text-sky-600 truncate" title={webhookUrl}>{webhookUrl}</p>
               </div>
             </div>
 
-            {/* Forwarding Workflow Info */}
             <div className="p-4 rounded-xl bg-sky-500/5 border border-sky-500/15 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div className="space-y-1">
                 <h4 className="text-xs font-bold text-sky-700 flex items-center gap-1.5">
-                  <Icons.Info className="h-3.5 w-3.5 text-sky-500" />
-                  Automatic Channel Registration
+                  <InfoIcon className="h-3.5 w-3.5" />
+                  Auto Registration
                 </h4>
-                <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  Forward any message from a Telegram channel to your bot. The bot extracts the Channel ID & Name automatically and saves them to Cloudflare D1 while ignoring duplicates.
-                </p>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">Forward messages to the bot to register channels automatically.</p>
               </div>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setIsAdding(!isAdding)}
-                className="h-9 px-4 rounded-xl font-bold text-xs border-sky-500/30 text-sky-600 hover:bg-sky-500/10 shrink-0"
+                className="h-9 px-4 rounded-xl font-bold text-xs border-sky-500/30 text-sky-600 shrink-0"
               >
-                {isAdding ? "Cancel" : "+ Add Channel Manually"}
+                {isAdding ? "Cancel" : "+ Add Manually"}
               </Button>
             </div>
 
-            {/* Manual Add Form */}
             <AnimatePresence>
               {isAdding && (
                 <motion.form
@@ -366,48 +444,28 @@ export function Bots() {
                   onSubmit={handleAddChannelSubmit}
                   className="p-4 rounded-xl bg-muted/30 border border-border/40 space-y-4 overflow-hidden"
                 >
-                  <h4 className="text-xs font-bold text-foreground">Add New Telegram Channel</h4>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                        Channel Name
-                      </Label>
+                      <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Name</Label>
                       <Input
-                        placeholder="e.g. Movie Updates Channel"
+                        placeholder="Movie Channel"
                         value={newChanName}
                         onChange={(e) => setNewChanName(e.target.value)}
-                        className="h-10 rounded-xl bg-background border-border/40 text-xs font-bold"
+                        className="h-10 rounded-xl text-xs font-bold"
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                        Channel ID *
-                      </Label>
+                      <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">ID *</Label>
                       <Input
-                        placeholder="e.g. -1001234567890"
+                        placeholder="-100..."
                         value={newChanId}
                         onChange={(e) => setNewChanId(e.target.value)}
-                        className="h-10 rounded-xl bg-background border-border/40 text-xs font-bold font-mono"
+                        className="h-10 rounded-xl text-xs font-bold font-mono"
                       />
                     </div>
                   </div>
                   <div className="flex justify-end gap-2">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setIsAdding(false)}
-                      className="h-9 px-4 rounded-xl text-xs font-bold"
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      type="submit"
-                      size="sm"
-                      className="h-9 px-6 rounded-xl font-bold text-xs bg-emerald-500 hover:bg-emerald-600 text-white shadow-md shadow-emerald-500/20"
-                    >
-                      Save Channel
-                    </Button>
+                    <Button type="submit" size="sm" className="h-9 px-6 rounded-xl font-bold text-xs bg-emerald-500 text-white">Save</Button>
                   </div>
                 </motion.form>
               )}
@@ -415,235 +473,124 @@ export function Bots() {
           </CardContent>
         </Card>
 
-        {/* Posting Interval Card */}
         <Card className="border border-border/40 bg-card shadow-sm rounded-2xl">
           <CardHeader className="border-b border-border/40 bg-muted/20 py-4 px-6">
             <CardTitle className="text-sm font-bold text-foreground flex items-center gap-2">
-              <Icons.Clock className="h-4 w-4 text-emerald-500" />
-              Posting Interval Card
+              <ClockIcon className="h-4 w-4 text-emerald-500" />
+              Interval
             </CardTitle>
-            <CardDescription className="text-xs text-muted-foreground">
-              One global interval setting applied across all channels
-            </CardDescription>
           </CardHeader>
           <CardContent className="p-6 space-y-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 p-6 rounded-2xl bg-muted/20 border border-border/40">
               <div className="space-y-3">
-                <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
-                  Interval Value
-                </Label>
+                <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Value</Label>
                 <Input
                   type="number"
                   min={1}
                   value={intervalVal}
                   onChange={(e) => setIntervalVal(parseInt(e.target.value) || 1)}
-                  className="h-11 rounded-xl bg-background border-border/40 font-bold"
+                  className="h-11 rounded-xl font-bold"
                 />
               </div>
               <div className="space-y-3">
-                <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
-                  Unit Selector
-                </Label>
+                <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Unit</Label>
                 <select
                   value={intervalUnit}
                   onChange={(e) => setIntervalUnit(e.target.value as "minutes" | "hours")}
-                  className="flex h-11 w-full rounded-xl border border-border/40 bg-background px-3 py-2 text-sm font-bold ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/20 appearance-none cursor-pointer"
+                  className="flex h-11 w-full rounded-xl border border-border/40 bg-background px-3 py-2 text-sm font-bold appearance-none cursor-pointer"
                 >
                   <option value="minutes">Minutes</option>
                   <option value="hours">Hours</option>
                 </select>
               </div>
             </div>
-
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-medium text-muted-foreground">
-                Example: <span className="font-bold text-foreground">{intervalVal} {intervalUnit}</span> = Every {intervalVal} {intervalUnit}
-              </p>
-              <Button
-                onClick={handleSaveInterval}
-                className="h-10 px-6 rounded-xl font-bold text-xs bg-emerald-500 hover:bg-emerald-600 text-white shadow-md shadow-emerald-500/20"
-              >
-                Save Interval
-              </Button>
+            <div className="flex justify-end">
+              <Button onClick={handleSaveInterval} className="h-10 px-6 rounded-xl font-bold text-xs bg-emerald-500 text-white">Save Interval</Button>
             </div>
           </CardContent>
         </Card>
 
-        {/* Post Quantity Card */}
         <Card className="border border-border/40 bg-card shadow-sm rounded-2xl">
           <CardHeader className="border-b border-border/40 bg-muted/20 py-4 px-6">
             <CardTitle className="text-sm font-bold text-foreground flex items-center gap-2">
-              <Icons.Layers className="h-4 w-4 text-purple-500" />
-              Post Quantity Card
+              <LayersIcon className="h-4 w-4 text-purple-500" />
+              Quantity
             </CardTitle>
-            <CardDescription className="text-xs text-muted-foreground">
-              Number of posts sent per channel per execution (Min: 1, Max: 20)
-            </CardDescription>
           </CardHeader>
           <CardContent className="p-6 space-y-6">
             <div className="p-6 rounded-2xl bg-muted/20 border border-border/40 space-y-3">
-              <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
-                Post Quantity
-              </Label>
+              <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Posts per channel</Label>
               <Input
                 type="number"
                 min={1}
                 max={20}
                 value={postQuantity}
                 onChange={(e) => setPostQuantity(parseInt(e.target.value) || 1)}
-                className="h-11 rounded-xl bg-background border-border/40 font-bold max-w-xs"
+                className="h-11 rounded-xl font-bold max-w-xs"
               />
-              <p className="text-[11px] text-muted-foreground">
-                Each channel will receive <span className="text-emerald-500 font-bold">{postQuantity}</span> post(s) sequentially with a 5-second delay between posts.
-              </p>
             </div>
-
             <div className="flex justify-end">
-              <Button
-                onClick={handleSaveQuantity}
-                className="h-10 px-6 rounded-xl font-bold text-xs bg-emerald-500 hover:bg-emerald-600 text-white shadow-md shadow-emerald-500/20"
-              >
-                Save Quantity
-              </Button>
+              <Button onClick={handleSaveQuantity} className="h-10 px-6 rounded-xl font-bold text-xs bg-emerald-500 text-white">Save Quantity</Button>
             </div>
           </CardContent>
         </Card>
 
-        {/* Channels Management */}
         <Card className="border border-border/40 bg-card shadow-sm rounded-2xl">
           <CardHeader className="border-b border-border/40 bg-muted/20 py-4 px-6">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-sm font-bold text-foreground">Channels Management</CardTitle>
-                <CardDescription className="text-xs text-muted-foreground">
-                  Registered channels and performance statistics
-                </CardDescription>
+                <CardTitle className="text-sm font-bold text-foreground">Channels</CardTitle>
               </div>
-
               <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={loadChannels}
-                  className="h-9 px-3 rounded-xl text-xs font-bold border-border/40 hover:bg-muted"
-                >
-                  <Icons.RefreshCw className="h-3.5 w-3.5 mr-1" />
-                  Sync
+                <Button variant="outline" size="sm" onClick={loadChannels} className="h-9 px-3 rounded-xl text-xs font-bold border-border/40">
+                  <RefreshIcon className="h-3.5 w-3.5 mr-1" /> Sync
                 </Button>
-
-                {channels.some((c) => c.enabled) && (
-                  <Button
-                    disabled={isPosting}
-                    onClick={handleRunAllWorkflow}
-                    size="sm"
-                    className="h-9 px-4 rounded-xl font-bold text-xs bg-sky-500 hover:bg-sky-600 text-white shadow-md shadow-sky-500/20"
-                  >
-                    Run Automation Scheduler
+                {(channels || []).some((c) => c?.enabled) && (
+                  <Button disabled={isPosting} onClick={handleRunAllWorkflow} size="sm" className="h-9 px-4 rounded-xl font-bold text-xs bg-sky-500 text-white">
+                    Run Automation
                   </Button>
                 )}
               </div>
             </div>
           </CardHeader>
           <CardContent className="p-0">
-            {channels.length === 0 ? (
+            {(!channels || channels.length === 0) ? (
               <div className="p-12 text-center space-y-3">
                 <div className="h-12 w-12 rounded-2xl bg-sky-500/10 text-sky-500 flex items-center justify-center mx-auto">
-                  <Icons.Telegram className="h-6 w-6" />
+                  <TelegramIcon className="h-6 w-6" />
                 </div>
-                <h4 className="text-sm font-bold text-foreground">No Telegram Channels Added</h4>
-                <p className="text-xs text-muted-foreground max-w-md mx-auto">
-                  Forward any message from a channel to your Telegram Bot, or click "+ Add Channel Manually" above to register a channel.
-                </p>
+                <h4 className="text-sm font-bold text-foreground">No channels added yet</h4>
+                <p className="text-xs text-muted-foreground">Register channels to begin automation.</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="border-b border-border/40 bg-muted/10 text-[10px] font-black uppercase tracking-wider text-muted-foreground">
-                      <th className="py-3 px-6">Channel Name</th>
-                      <th className="py-3 px-6">Channel ID</th>
-                      <th className="py-3 px-6">Total Success</th>
-                      <th className="py-3 px-6">Total Failed</th>
+                      <th className="py-3 px-6">Name</th>
+                      <th className="py-3 px-6">ID</th>
+                      <th className="py-3 px-6">Success</th>
+                      <th className="py-3 px-6">Failed</th>
                       <th className="py-3 px-6 text-right">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-border/30 text-xs font-medium">
+                  <tbody className="divide-y divide-border/30 text-xs">
                     {channels.map((chan) => (
-                      <tr key={chan.id || chan.channelId} className="hover:bg-muted/10 transition-colors">
-                        <td className="py-4 px-6 font-bold text-foreground">
-                          <div className="flex items-center gap-2">
-                            <span className={`h-2 w-2 rounded-full ${chan.enabled ? "bg-emerald-500" : "bg-muted-foreground/30"}`} />
-                            {chan.channelName}
-                          </div>
+                      <tr key={chan?.id || chan?.channelId} className="hover:bg-muted/10">
+                        <td className="py-4 px-6 font-bold text-foreground flex items-center gap-2">
+                          <span className={`h-2 w-2 rounded-full ${chan?.enabled ? "bg-emerald-500" : "bg-muted-foreground/30"}`} />
+                          {chan?.channelName || "Unknown"}
                         </td>
-                        <td className="py-4 px-6 font-mono text-muted-foreground text-[11px]">
-                          {chan.channelId}
-                        </td>
-                        <td className="py-4 px-6">
-                          <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 font-bold px-2.5 py-0.5 text-[11px]">
-                            {chan.totalSuccess || 0}
-                          </Badge>
-                        </td>
-                        <td className="py-4 px-6">
-                          <Badge className="bg-rose-500/10 text-rose-500 border-rose-500/20 font-bold px-2.5 py-0.5 text-[11px]">
-                            {chan.totalFailed || 0}
-                          </Badge>
-                        </td>
+                        <td className="py-4 px-6 font-mono text-muted-foreground text-[11px]">{chan?.channelId}</td>
+                        <td className="py-4 px-6"><Badge className="bg-emerald-500/10 text-emerald-600 px-2.5 text-[11px]">{chan?.totalSuccess || 0}</Badge></td>
+                        <td className="py-4 px-6"><Badge className="bg-rose-500/10 text-rose-500 px-2.5 text-[11px]">{chan?.totalFailed || 0}</Badge></td>
                         <td className="py-4 px-6 text-right">
                           <div className="flex items-center justify-end gap-2">
-                            {/* Post Now Action */}
-                            <Button
-                              disabled={isPosting || !chan.enabled}
-                              onClick={() => handlePostNow(chan)}
-                              title="Post Now"
-                              size="sm"
-                              variant="outline"
-                              className="h-8 px-3 rounded-lg border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10 font-bold text-xs"
-                            >
-                              <i className="fi fi-rr-arrow-up-right-from-square mr-1 text-xs" />
-                              <span className="hidden sm:inline">Post Now</span>
+                            <Button disabled={isPosting || !chan?.enabled} onClick={() => handlePostNow(chan)} size="sm" variant="outline" className="h-8 px-3 text-xs font-bold border-emerald-500/30 text-emerald-600">Post Now</Button>
+                            <Button onClick={() => handleToggle(chan?.channelId)} size="sm" variant="ghost" className="h-8 w-8 p-0 text-amber-500">
+                               <i className={`fi fi-rr-${chan?.enabled ? "pause" : "play"} text-sm`} />
                             </Button>
-
-                            {/* Enable / Disable Action */}
-                            <Button
-                              onClick={() => handleToggle(chan.channelId)}
-                              title={chan.enabled ? "Disable Channel" : "Enable Channel"}
-                              size="sm"
-                              variant="ghost"
-                              className={`h-8 w-8 p-0 rounded-lg transition-colors ${
-                                chan.enabled
-                                  ? "text-amber-500 hover:bg-amber-500/10"
-                                  : "text-emerald-500 hover:bg-emerald-500/10"
-                              }`}
-                            >
-                              <AnimatePresence mode="wait">
-                                <motion.div
-                                  key={chan.enabled ? "pause" : "play"}
-                                  initial={{ scale: 0.5, opacity: 0, rotate: chan.enabled ? -90 : 90 }}
-                                  animate={{ scale: 1, opacity: 1, rotate: 0 }}
-                                  exit={{ scale: 0.5, opacity: 0, rotate: chan.enabled ? 90 : -90 }}
-                                  transition={{ duration: 0.2 }}
-                                  className="flex items-center justify-center"
-                                >
-                                  {chan.enabled ? (
-                                    <i className="fi fi-rr-pause text-sm" />
-                                  ) : (
-                                    <i className="fi fi-br-play text-sm" />
-                                  )}
-                                </motion.div>
-                              </AnimatePresence>
-                            </Button>
-
-                            {/* Remove Action */}
-                            <Button
-                              onClick={() => handleRemove(chan.channelId)}
-                              title="Remove Channel"
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 w-8 p-0 rounded-lg text-rose-500 hover:bg-rose-500/10 hover:text-rose-600"
-                            >
-                              <i className="fi fi-rr-trash text-sm" />
-                            </Button>
+                            <Button onClick={() => handleRemove(chan?.channelId)} size="sm" variant="ghost" className="h-8 w-8 p-0 text-rose-500"><i className="fi fi-rr-trash text-sm" /></Button>
                           </div>
                         </td>
                       </tr>
@@ -658,3 +605,12 @@ export function Bots() {
     </div>
   );
 }
+
+export function Bots() {
+  return (
+    <BotsErrorBoundary>
+      <BotsContent />
+    </BotsErrorBoundary>
+  );
+}
+

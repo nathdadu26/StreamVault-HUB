@@ -9,7 +9,7 @@ export function useBackendHealth() {
 
   const checkHealth = async () => {
     if (!KOYEB_SERVER_URL) {
-      console.error("[BackendHealth] VITE_KOYEB_PROCESSING_SERVER_URL is not defined in environment variables.");
+      console.info("[BackendHealth] VITE_KOYEB_PROCESSING_SERVER_URL is not set.");
       setIsOnline(false);
       setIsChecking(false);
       return;

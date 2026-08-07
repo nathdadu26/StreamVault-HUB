@@ -411,7 +411,7 @@ export async function deleteFile(id: string, slug?: string): Promise<{ success: 
 
     console.log(`[Delete Action] Step 3: API Response HTTP status: ${res.status} ${res.statusText}`);
 
-    const resData = await res.json().catch(() => ({}));
+    const resData = (await res.json().catch(() => ({}))) as any;
 
     if (!res.ok || resData.success === false) {
       const errMsg = resData.error || `Server error (HTTP ${res.status})`;
@@ -532,15 +532,24 @@ export function saveStoredChannels(channels: import("../types").TelegramChannel[
 export async function fetchTelegramChannels(): Promise<import("../types").TelegramChannel[]> {
   try {
     const res = await fetch("/api/telegram");
-    if (res.ok) {
+    const contentType = res.headers.get("content-type");
+    if (res.ok && contentType && contentType.includes("application/json")) {
       const data = await res.json();
       if (Array.isArray(data)) {
-        saveStoredChannels(data);
-        return data;
+        const validated = data.map(chan => ({
+          ...chan,
+          enabled: chan.enabled ?? true,
+          totalSuccess: chan.totalSuccess ?? 0,
+          totalFailed: chan.totalFailed ?? 0,
+          channelId: chan.channelId || chan.id || "unknown",
+          channelName: chan.channelName || "Unnamed Channel"
+        }));
+        saveStoredChannels(validated);
+        return validated;
       }
     }
   } catch (e) {
-    console.error("[fetchTelegramChannels] Error:", e);
+    console.warn("[fetchTelegramChannels] D1 sync warning:", e);
   }
   return getStoredChannels();
 }

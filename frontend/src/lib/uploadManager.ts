@@ -142,7 +142,7 @@ class UploadManagerClass {
     try {
       const res = await fetch(`${KOYEB_SERVER_URL}/upload/verify-bunny/${bunnyVideoId}`, { signal });
       if (!res.ok) return { exists: false };
-      const data = await res.json();
+      const data = (await res.json()) as any;
       return {
         exists: data.exists ?? false,
         status: data.status,
