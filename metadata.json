@@ -1,0 +1,6 @@
+{
+  "name": "StreamVault HUB",
+  "description": "Secure, scalable video and file gateway platform with task verification, Plyr.io video streaming, and Telegram file access.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

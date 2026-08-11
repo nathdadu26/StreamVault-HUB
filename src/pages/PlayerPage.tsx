@@ -1,0 +1,124 @@
+import React, { useEffect, useState } from 'react';
+import { fetchPlayerStream } from '../lib/api';
+import { VideoItem } from '../types';
+import { PlyrPlayer } from '../components/PlyrPlayer';
+import { AdBanner } from '../components/AdBanner';
+import { PlayerSkeleton } from '../components/SkeletonLoaders';
+import { ErrorState } from '../components/ErrorState';
+import { Download, Eye, FileText, Play } from 'lucide-react';
+
+interface PlayerPageProps {
+  slug: string;
+}
+
+export const PlayerPage: React.FC<PlayerPageProps> = ({ slug }) => {
+  const [loading, setLoading] = useState(true);
+  const [video, setVideo] = useState<VideoItem | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [requiresGateway, setRequiresGateway] = useState(false);
+
+  // Extract token from query param
+  const queryParams = new URLSearchParams(window.location.search);
+  const gatewayToken = queryParams.get('token') || '';
+
+  useEffect(() => {
+    let isMounted = true;
+    async function load() {
+      setLoading(true);
+      setError(null);
+      setRequiresGateway(false);
+
+      if (!gatewayToken) {
+        setRequiresGateway(true);
+        setError('Unauthorized access. Gateway token is missing or expired.');
+        setLoading(false);
+        return;
+      }
+
+      const res = await fetchPlayerStream(slug, gatewayToken);
+      if (isMounted) {
+        if (res.success && res.data) {
+          setVideo(res.data);
+        } else {
+          if (res.requiresGateway) {
+            setRequiresGateway(true);
+          }
+          setError(res.error || 'Failed to access video stream.');
+        }
+        setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      isMounted = false;
+    };
+  }, [slug, gatewayToken]);
+
+  if (loading) {
+    return (
+      <div className="py-8 px-4 max-w-md mx-auto">
+        <PlayerSkeleton />
+      </div>
+    );
+  }
+
+  if (requiresGateway || error || !video) {
+    return (
+      <ErrorState
+        type="401"
+        slug={slug}
+        title="Unauthorized Video Access"
+        message={error || 'Direct access is strictly forbidden. You must complete the task gateway first.'}
+      />
+    );
+  }
+
+  return (
+    <div className="max-w-md mx-auto px-4 py-5 space-y-4 animate-fadeIn">
+      {/* Plyr Video Player Container */}
+      <div className="w-full rounded-2xl overflow-hidden shadow-2xs border border-slate-200/80 dark:border-slate-800 bg-black">
+        <PlyrPlayer src={video.video_link} title={video.title} />
+      </div>
+
+      {/* Title & Download Info Card */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 flex items-center justify-between shadow-2xs">
+        <div className="flex items-center gap-3 min-w-0 pr-2">
+          <div className="w-10 h-10 rounded-xl bg-purple-100 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
+            <Play className="w-5 h-5 fill-purple-600 dark:fill-purple-400" />
+          </div>
+
+          <div className="min-w-0">
+            <h1 className="font-bold text-slate-900 dark:text-white text-base leading-snug truncate">
+              {video.title}
+            </h1>
+
+            <div className="flex items-center gap-2.5 text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-medium">
+              <span className="flex items-center gap-1">
+                <FileText className="w-3.5 h-3.5 text-slate-400" />
+                {video.file_size}
+              </span>
+              <span>•</span>
+              <span className="flex items-center gap-1">
+                <Eye className="w-3.5 h-3.5 text-slate-400" />
+                {video.views} Views
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Download Button */}
+        <a
+          href={`/dl/${slug}?token=${gatewayToken}`}
+          className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm px-4 py-2 rounded-xl flex items-center gap-1.5 shadow-2xs transition cursor-pointer shrink-0"
+          id="download-video-btn"
+        >
+          <Download className="w-4 h-4" />
+          <span>Download</span>
+        </a>
+      </div>
+
+      {/* Advertisement Banner */}
+      <AdBanner />
+    </div>
+  );
+};
