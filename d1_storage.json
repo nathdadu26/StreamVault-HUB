@@ -1,0 +1,83 @@
+{
+  "videos_db": [
+    {
+      "id": "v_1",
+      "slug": "cyberpunk-2077-trailer",
+      "title": "Cyberpunk 2077: Phantom Liberty Official Cinematic Stream",
+      "video_link": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+      "file_size": "485.2 MB",
+      "views": 1420,
+      "created_at": "2026-08-11T14:10:49.134Z",
+      "updated_at": "2026-08-14T14:10:49.135Z"
+    },
+    {
+      "id": "v_2",
+      "slug": "nature-4k-documentary",
+      "title": "Nature 4K Wildlife & Forest Exploration Showcase",
+      "video_link": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
+      "file_size": "820.5 MB",
+      "views": 3890,
+      "created_at": "2026-08-07T14:10:49.135Z",
+      "updated_at": "2026-08-14T14:10:49.135Z"
+    },
+    {
+      "id": "v_3",
+      "slug": "stream-demo-720p",
+      "title": "StreamVault HUB High-Speed Edge Video Stream Test",
+      "video_link": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+      "file_size": "150.0 MB",
+      "views": 942,
+      "created_at": "2026-08-13T14:10:49.135Z",
+      "updated_at": "2026-08-14T14:10:49.135Z"
+    }
+  ],
+  "telegram_files": [
+    {
+      "id": "tg_1",
+      "slug": "jp681CzI",
+      "file_name": "Premium_Architectural_Designs_2026_Pack.zip",
+      "file_size": "124.8 MB",
+      "created_at": "2026-08-12T14:10:49.135Z",
+      "updated_at": "2026-08-14T14:10:49.135Z"
+    },
+    {
+      "id": "tg_2",
+      "slug": "secure-vault-doc",
+      "file_name": "StreamVault_Edge_Developer_Documentation.pdf",
+      "file_size": "18.4 MB",
+      "created_at": "2026-08-09T14:10:49.135Z",
+      "updated_at": "2026-08-14T14:10:49.135Z"
+    }
+  ],
+  "visitors": [],
+  "gateway_sessions": [],
+  "blogger_db": [
+    {
+      "id": "bl_0",
+      "slug": "raqo717lxs__vi53",
+      "title": "Featured Blogger Embed Stream: High Octane Showcase",
+      "video_link": "https://www.youtube.com/embed/dQw4w9WgXcQ",
+      "views": 450,
+      "created_at": "2026-08-13T14:10:49.135Z",
+      "updated_at": "2026-08-14T14:10:49.135Z"
+    },
+    {
+      "id": "bl_1",
+      "slug": "blogger-stream-sample",
+      "title": "Premium Blogger Hosted Video Showcase Stream",
+      "video_link": "https://www.youtube.com/embed/dQw4w9WgXcQ",
+      "views": 1250,
+      "created_at": "2026-08-12T14:22:51.984Z",
+      "updated_at": "2026-08-14T14:22:51.984Z"
+    },
+    {
+      "id": "bl_2",
+      "slug": "tech-review-blogger",
+      "title": "Next-Gen Edge Cloud Infrastructure Breakdown & Review",
+      "video_link": "https://www.youtube.com/embed/L_LUpnjgPso",
+      "views": 3120,
+      "created_at": "2026-08-10T14:22:51.984Z",
+      "updated_at": "2026-08-14T14:22:51.984Z"
+    }
+  ]
+}

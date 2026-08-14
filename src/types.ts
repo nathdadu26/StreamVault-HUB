@@ -61,8 +61,10 @@ export interface TaskVerifyResponse {
 export interface ResourceInfoResponse {
   success: boolean;
   type?: 'video' | 'blogger' | 'telegram';
+  destinationPath?: string;
   data?: VideoItem | BloggerItem | TelegramFileItem;
   error?: string;
+  notFound?: boolean;
   requiresGateway?: boolean;
   botUsername?: string;
 }

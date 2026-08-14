@@ -146,6 +146,15 @@ class D1Database {
     if (!this.data.blogger_db || this.data.blogger_db.length === 0) {
       const defaultBloggerVideos: BloggerRecord[] = [
         {
+          id: 'bl_0',
+          slug: 'raqo717lxs__vi53',
+          title: 'Featured Blogger Embed Stream: High Octane Showcase',
+          video_link: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+          views: 450,
+          created_at: new Date(Date.now() - 86400000 * 1).toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        {
           id: 'bl_1',
           slug: 'blogger-stream-sample',
           title: 'Premium Blogger Hosted Video Showcase Stream',

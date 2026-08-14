@@ -53,7 +53,7 @@ export async function verifyGatewayTask(
 export async function fetchPlayerStream(
   slug: string,
   gatewayToken: string
-): Promise<{ success: boolean; data?: VideoItem; requiresGateway?: boolean; error?: string }> {
+): Promise<{ success: boolean; data?: VideoItem; requiresGateway?: boolean; notFound?: boolean; error?: string }> {
   try {
     const res = await fetch(`/api/player/${encodeURIComponent(slug)}?token=${encodeURIComponent(gatewayToken)}`);
     return await res.json();
@@ -109,7 +109,7 @@ export async function verifyDownloadTask(
 export async function fetchTelegramFile(
   slug: string,
   gatewayToken: string
-): Promise<{ success: boolean; data?: TelegramFileItem; botUsername?: string; telegramUrl?: string; requiresGateway?: boolean; error?: string }> {
+): Promise<{ success: boolean; data?: TelegramFileItem; botUsername?: string; telegramUrl?: string; requiresGateway?: boolean; notFound?: boolean; error?: string }> {
   try {
     const res = await fetch(`/api/telegram/${encodeURIComponent(slug)}?token=${encodeURIComponent(gatewayToken)}`);
     return await res.json();

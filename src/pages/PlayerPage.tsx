@@ -16,6 +16,7 @@ export const PlayerPage: React.FC<PlayerPageProps> = ({ slug }) => {
   const [video, setVideo] = useState<VideoItem | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [requiresGateway, setRequiresGateway] = useState(false);
+  const [isNotFound, setIsNotFound] = useState(false);
 
   // Extract token from query param
   const queryParams = new URLSearchParams(window.location.search);
@@ -27,6 +28,7 @@ export const PlayerPage: React.FC<PlayerPageProps> = ({ slug }) => {
       setLoading(true);
       setError(null);
       setRequiresGateway(false);
+      setIsNotFound(false);
 
       if (!gatewayToken) {
         setRequiresGateway(true);
@@ -40,7 +42,9 @@ export const PlayerPage: React.FC<PlayerPageProps> = ({ slug }) => {
         if (res.success && res.data) {
           setVideo(res.data);
         } else {
-          if (res.requiresGateway) {
+          if (res.notFound) {
+            setIsNotFound(true);
+          } else if (res.requiresGateway) {
             setRequiresGateway(true);
           }
           setError(res.error || 'Failed to access video stream.');
@@ -59,6 +63,17 @@ export const PlayerPage: React.FC<PlayerPageProps> = ({ slug }) => {
       <div className="py-8 px-4 max-w-md mx-auto">
         <PlayerSkeleton />
       </div>
+    );
+  }
+
+  if (isNotFound) {
+    return (
+      <ErrorState
+        type="404"
+        slug={slug}
+        title="Video Not Found"
+        message={error || 'The requested video file was not found.'}
+      />
     );
   }
 

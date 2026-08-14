@@ -19,12 +19,19 @@ export const TelegramPage: React.FC<TelegramPageProps> = ({ slug }) => {
   const [botUsername, setBotUsername] = useState<string>('file_server_bot');
   const [telegramUrl, setTelegramUrl] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
+  const [requiresGateway, setRequiresGateway] = useState(false);
+  const [isNotFound, setIsNotFound] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
     async function load() {
       setLoading(true);
+      setError(null);
+      setRequiresGateway(false);
+      setIsNotFound(false);
+
       if (!gatewayToken) {
+        setRequiresGateway(true);
         setError('Unauthorized access. Gateway token is missing or expired.');
         setLoading(false);
         return;
@@ -37,6 +44,11 @@ export const TelegramPage: React.FC<TelegramPageProps> = ({ slug }) => {
           if (res.botUsername) setBotUsername(res.botUsername);
           if (res.telegramUrl) setTelegramUrl(res.telegramUrl);
         } else {
+          if (res.notFound) {
+            setIsNotFound(true);
+          } else if (res.requiresGateway) {
+            setRequiresGateway(true);
+          }
           setError(res.error || 'Failed to retrieve Telegram file details.');
         }
         setLoading(false);
@@ -56,7 +68,18 @@ export const TelegramPage: React.FC<TelegramPageProps> = ({ slug }) => {
     );
   }
 
-  if (error || !tgFile) {
+  if (isNotFound) {
+    return (
+      <ErrorState
+        type="404"
+        slug={slug}
+        title="Telegram File Not Found"
+        message={error || 'The requested Telegram file was not found.'}
+      />
+    );
+  }
+
+  if (requiresGateway || error || !tgFile) {
     return (
       <ErrorState
         type="401"

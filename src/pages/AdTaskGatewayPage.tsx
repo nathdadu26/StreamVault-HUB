@@ -196,13 +196,14 @@ export const AdTaskGatewayPage: React.FC<AdTaskGatewayPageProps> = ({ slug }) =>
     return (
       <ErrorState
         type="404"
+        slug={slug}
         title="Resource Not Found"
-        message="The requested video or file slug does not exist in our StreamVault HUB database."
+        message={resource?.error || 'The requested resource slug was not found in blogger_db, telegram_files, or videos_db.'}
       />
     );
   }
 
-  const isVideo = resource.type === 'video';
+  const isVideo = resource.type === 'video' || resource.type === 'blogger';
   const isBothCompleted = task1State.status === 'completed' && task2State.status === 'completed';
 
   return (

@@ -78,37 +78,13 @@ app.use(rateLimiter);
 // API ENDPOINTS
 // -------------------------------------------------------------
 
-// 1. GET /api/resource/:slug - Check slug type & details
+// 1. GET /api/resource/:slug - Check slug in blogger_db, telegram_files, videos_db
 app.get('/api/resource/:slug', (req: Request, res: Response) => {
   try {
     const { slug } = req.params;
     const visitorInfo = getVisitorInfo(req);
 
-    // Search in videos_db first, then blogger_db, then telegram_files
-    const video = db.getVideoBySlug(slug);
-    if (video) {
-      db.logVisitor({
-        ...visitorInfo,
-        path: `/ad/${slug}`,
-        slug,
-        event: 'gateway_view_video',
-      });
-
-      return res.json({
-        success: true,
-        type: 'video',
-        data: {
-          id: video.id,
-          slug: video.slug,
-          title: video.title,
-          file_size: video.file_size,
-          views: video.views,
-          created_at: video.created_at,
-          updated_at: video.updated_at,
-        },
-      });
-    }
-
+    // 1. Check in blogger_db
     const blogger = db.getBloggerBySlug(slug);
     if (blogger) {
       db.logVisitor({
@@ -121,15 +97,19 @@ app.get('/api/resource/:slug', (req: Request, res: Response) => {
       return res.json({
         success: true,
         type: 'blogger',
+        destinationPath: `/bl/${slug}`,
         data: {
           id: blogger.id,
           slug: blogger.slug,
           title: blogger.title,
           views: blogger.views,
+          created_at: blogger.created_at,
+          updated_at: blogger.updated_at,
         },
       });
     }
 
+    // 2. Check in telegram_files
     const tgFile = db.getTelegramFileBySlug(slug);
     if (tgFile) {
       db.logVisitor({
@@ -142,6 +122,7 @@ app.get('/api/resource/:slug', (req: Request, res: Response) => {
       return res.json({
         success: true,
         type: 'telegram',
+        destinationPath: `/tg/${slug}`,
         data: {
           id: tgFile.id,
           slug: tgFile.slug,
@@ -153,6 +134,33 @@ app.get('/api/resource/:slug', (req: Request, res: Response) => {
       });
     }
 
+    // 3. Check in videos_db
+    const video = db.getVideoBySlug(slug);
+    if (video) {
+      db.logVisitor({
+        ...visitorInfo,
+        path: `/ad/${slug}`,
+        slug,
+        event: 'gateway_view_video',
+      });
+
+      return res.json({
+        success: true,
+        type: 'video',
+        destinationPath: `/s/${slug}`,
+        data: {
+          id: video.id,
+          slug: video.slug,
+          title: video.title,
+          file_size: video.file_size,
+          views: video.views,
+          created_at: video.created_at,
+          updated_at: video.updated_at,
+        },
+      });
+    }
+
+    // Not found in any of the three tables
     db.logVisitor({
       ...visitorInfo,
       path: `/ad/${slug}`,
@@ -162,6 +170,7 @@ app.get('/api/resource/:slug', (req: Request, res: Response) => {
 
     return res.status(404).json({
       success: false,
+      notFound: true,
       error: 'The requested resource or video file was not found.',
     });
   } catch (err: any) {
@@ -177,10 +186,10 @@ app.post('/api/gateway/task/start', (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'Invalid task request parameters.' });
     }
 
-    const video = db.getVideoBySlug(slug);
     const blogger = db.getBloggerBySlug(slug);
     const tgFile = db.getTelegramFileBySlug(slug);
-    if (!video && !blogger && !tgFile) {
+    const video = db.getVideoBySlug(slug);
+    if (!blogger && !tgFile && !video) {
       return res.status(404).json({ success: false, error: 'Resource not found for this gateway.' });
     }
 
@@ -287,13 +296,23 @@ app.post('/api/gateway/task/verify', (req: Request, res: Response) => {
     // Task 2 completed -> Issue Master Gateway Token
     const masterGatewayToken = db.createMasterGatewayToken(slug, session.visitor_id);
 
-    const isBlogger = !!db.getBloggerBySlug(slug);
-    const isVideo = !!db.getVideoBySlug(slug);
-    let redirectUrl = `/tg/${slug}?token=${masterGatewayToken}`;
-    if (isBlogger) {
+    // Explicit D1 Table lookup for destination routing
+    const blogger = db.getBloggerBySlug(slug);
+    const tgFile = db.getTelegramFileBySlug(slug);
+    const video = db.getVideoBySlug(slug);
+
+    let redirectUrl = '';
+    if (blogger) {
       redirectUrl = `/bl/${slug}?token=${masterGatewayToken}`;
-    } else if (isVideo) {
+    } else if (tgFile) {
+      redirectUrl = `/tg/${slug}?token=${masterGatewayToken}`;
+    } else if (video) {
       redirectUrl = `/s/${slug}?token=${masterGatewayToken}`;
+    } else {
+      return res.status(404).json({
+        success: false,
+        error: 'The requested resource slug was not found in blogger_db, telegram_files, or videos_db.',
+      });
     }
 
     return res.json({
@@ -530,7 +549,7 @@ app.get('/api/telegram/:slug', (req: Request, res: Response) => {
 
     const tgFile = db.getTelegramFileBySlug(slug);
     if (!tgFile) {
-      return res.status(404).json({ success: false, error: 'Telegram file not found.' });
+      return res.status(404).json({ success: false, notFound: true, error: 'Telegram file not found.' });
     }
 
     const telegramDeepLink = `https://t.me/${BOT_USERNAME}?start=${slug}`;
