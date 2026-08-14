@@ -81,12 +81,17 @@ app.use(rateLimiter);
 // 1. GET /api/resource/:slug - Check slug in blogger_db, telegram_files, videos_db
 app.get('/api/resource/:slug', (req: Request, res: Response) => {
   try {
-    const { slug } = req.params;
+    const rawSlug = req.params.slug || '';
+    const slug = decodeURIComponent(rawSlug).trim();
     const visitorInfo = getVisitorInfo(req);
 
+    console.log(`[Resource Resolver] Requested slug: "${slug}"`);
+
     // 1. Check in blogger_db
+    console.log(`[Resource Resolver] [1/3] Querying table 'blogger_db' for slug: "${slug}"...`);
     const blogger = db.getBloggerBySlug(slug);
     if (blogger) {
+      console.log(`[Resource Resolver] -> Match found in 'blogger_db'! Title: "${blogger.title}" | Destination: /bl/${slug}`);
       db.logVisitor({
         ...visitorInfo,
         path: `/ad/${slug}`,
@@ -108,10 +113,13 @@ app.get('/api/resource/:slug', (req: Request, res: Response) => {
         },
       });
     }
+    console.log(`[Resource Resolver] -> No record found in 'blogger_db'.`);
 
     // 2. Check in telegram_files
+    console.log(`[Resource Resolver] [2/3] Querying table 'telegram_files' for slug: "${slug}"...`);
     const tgFile = db.getTelegramFileBySlug(slug);
     if (tgFile) {
+      console.log(`[Resource Resolver] -> Match found in 'telegram_files'! File: "${tgFile.file_name}" | Destination: /tg/${slug}`);
       db.logVisitor({
         ...visitorInfo,
         path: `/ad/${slug}`,
@@ -133,10 +141,13 @@ app.get('/api/resource/:slug', (req: Request, res: Response) => {
         },
       });
     }
+    console.log(`[Resource Resolver] -> No record found in 'telegram_files'.`);
 
     // 3. Check in videos_db
+    console.log(`[Resource Resolver] [3/3] Querying table 'videos_db' for slug: "${slug}"...`);
     const video = db.getVideoBySlug(slug);
     if (video) {
+      console.log(`[Resource Resolver] -> Match found in 'videos_db'! Title: "${video.title}" | Destination: /s/${slug}`);
       db.logVisitor({
         ...visitorInfo,
         path: `/ad/${slug}`,
@@ -159,8 +170,10 @@ app.get('/api/resource/:slug', (req: Request, res: Response) => {
         },
       });
     }
+    console.log(`[Resource Resolver] -> No record found in 'videos_db'. Slug "${slug}" not found in any of the 3 tables.`);
 
     // Not found in any of the three tables
+    console.log(`[Resource Resolver] -> Result: 404 Resource Not Found for slug: "${slug}"`);
     db.logVisitor({
       ...visitorInfo,
       path: `/ad/${slug}`,
@@ -174,6 +187,7 @@ app.get('/api/resource/:slug', (req: Request, res: Response) => {
       error: 'The requested resource or video file was not found.',
     });
   } catch (err: any) {
+    console.error(`[Resource Resolver] Error resolving resource:`, err?.message || err);
     return res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
