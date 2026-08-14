@@ -3,6 +3,7 @@ import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import { db } from './server/db.js';
+import { extractBloggerMediaUrl } from './server/mediaExtractor.js';
 
 dotenv.config();
 
@@ -443,7 +444,7 @@ app.post('/api/download/start', (req: Request, res: Response) => {
 });
 
 // 6. POST /api/download/verify - Verify Download Task
-app.post('/api/download/verify', (req: Request, res: Response) => {
+app.post('/api/download/verify', async (req: Request, res: Response) => {
   try {
     const { sessionToken, slug } = req.body;
     if (!sessionToken || !slug) {
@@ -478,24 +479,55 @@ app.post('/api/download/verify', (req: Request, res: Response) => {
 
     db.updateSession(sessionToken, { status: 'completed', completed_at: Date.now() });
 
-    const video = db.getVideoBySlug(slug) || db.getBloggerBySlug(slug);
-    if (!video) {
-      return res.status(404).json({ success: false, error: 'Download source video not found.' });
+    // Check in videos_db first
+    const video = db.getVideoBySlug(slug);
+    if (video) {
+      db.logVisitor({
+        ...visitorInfo,
+        path: `/dl/${slug}`,
+        slug,
+        event: 'download_unlocked',
+      });
+
+      return res.json({
+        success: true,
+        completed: true,
+        downloadUrl: video.video_link,
+        fileName: `${video.title.replace(/[^a-zA-Z0-9_-]/g, '_')}.mp4`,
+      });
     }
 
-    db.logVisitor({
-      ...visitorInfo,
-      path: `/dl/${slug}`,
-      slug,
-      event: 'download_unlocked',
-    });
+    // Check in blogger_db
+    const blogger = db.getBloggerBySlug(slug);
+    if (blogger) {
+      console.log(`[Download Verify] Extracting media source URL for blogger item: ${blogger.slug}`);
+      const directMediaUrl = await extractBloggerMediaUrl(blogger.video_link);
 
-    return res.json({
-      success: true,
-      completed: true,
-      downloadUrl: video.video_link,
-      fileName: video.title,
-    });
+      if (!directMediaUrl) {
+        console.error(`[Download Verify] Failed to extract direct media source from blogger link: ${blogger.video_link}`);
+        return res.status(422).json({
+          success: false,
+          completed: false,
+          error: 'Unable to extract direct video stream from this Blogger source. The video host does not provide a downloadable media source stream.',
+        });
+      }
+
+      db.logVisitor({
+        ...visitorInfo,
+        path: `/dl/${slug}`,
+        slug,
+        event: 'download_unlocked',
+      });
+
+      return res.json({
+        success: true,
+        completed: true,
+        downloadUrl: directMediaUrl,
+        fileName: `${blogger.title.replace(/[^a-zA-Z0-9_-]/g, '_')}.mp4`,
+      });
+    }
+
+    return res.status(404).json({ success: false, error: 'Download source video not found.' });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: 'Download task verification failed.' });
   }
