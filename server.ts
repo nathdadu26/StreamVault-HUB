@@ -293,21 +293,18 @@ app.post('/api/gateway/task/verify', (req: Request, res: Response) => {
       });
     }
 
-    // Task 2 completed -> Issue Master Gateway Token
-    const masterGatewayToken = db.createMasterGatewayToken(slug, session.visitor_id);
-
-    // Explicit D1 Table lookup for destination routing
+    // Destination redirect based on DB lookup
     const blogger = db.getBloggerBySlug(slug);
     const tgFile = db.getTelegramFileBySlug(slug);
     const video = db.getVideoBySlug(slug);
 
     let redirectUrl = '';
     if (blogger) {
-      redirectUrl = `/bl/${slug}?token=${masterGatewayToken}`;
+      redirectUrl = `/bl/${slug}`;
     } else if (tgFile) {
-      redirectUrl = `/tg/${slug}?token=${masterGatewayToken}`;
+      redirectUrl = `/tg/${slug}`;
     } else if (video) {
-      redirectUrl = `/s/${slug}?token=${masterGatewayToken}`;
+      redirectUrl = `/s/${slug}`;
     } else {
       return res.status(404).json({
         success: false,
@@ -318,7 +315,6 @@ app.post('/api/gateway/task/verify', (req: Request, res: Response) => {
     return res.json({
       success: true,
       completed: true,
-      gatewayToken: masterGatewayToken,
       redirectUrl,
     });
   } catch (err: any) {
@@ -326,32 +322,15 @@ app.post('/api/gateway/task/verify', (req: Request, res: Response) => {
   }
 });
 
-// 4. GET /api/player/:slug - Video Player Details (Requires Gateway Access)
+// 4. GET /api/player/:slug - Video Player Details
 app.get('/api/player/:slug', (req: Request, res: Response) => {
   try {
     const { slug } = req.params;
-    const token = req.query.token as string;
-
     const visitorInfo = getVisitorInfo(req);
-
-    if (!token || !db.isGatewayCompleted(slug, token)) {
-      db.logVisitor({
-        ...visitorInfo,
-        path: `/s/${slug}`,
-        slug,
-        event: 'unauthorized_player_access_attempt',
-      });
-
-      return res.status(401).json({
-        success: false,
-        requiresGateway: true,
-        error: 'Unauthorized access. You must complete the task gateway before watching this video.',
-      });
-    }
 
     const video = db.getVideoBySlug(slug);
     if (!video) {
-      return res.status(404).json({ success: false, error: 'Video file not found.' });
+      return res.status(404).json({ success: false, notFound: true, error: 'Video file not found.' });
     }
 
     // Increment views counter safely server-side
@@ -376,28 +355,11 @@ app.get('/api/player/:slug', (req: Request, res: Response) => {
   }
 });
 
-// 4b. GET /api/blogger/:slug - Blogger Video Details (Requires Gateway Access)
+// 4b. GET /api/blogger/:slug - Blogger Video Details
 app.get('/api/blogger/:slug', (req: Request, res: Response) => {
   try {
     const { slug } = req.params;
-    const token = req.query.token as string;
-
     const visitorInfo = getVisitorInfo(req);
-
-    if (!token || !db.isGatewayCompleted(slug, token)) {
-      db.logVisitor({
-        ...visitorInfo,
-        path: `/bl/${slug}`,
-        slug,
-        event: 'unauthorized_blogger_access_attempt',
-      });
-
-      return res.status(401).json({
-        success: false,
-        requiresGateway: true,
-        error: 'Unauthorized access. You must complete the task gateway before watching this video.',
-      });
-    }
 
     const video = db.getBloggerBySlug(slug);
     if (!video) {
@@ -429,13 +391,14 @@ app.get('/api/blogger/:slug', (req: Request, res: Response) => {
 // 5. POST /api/download/start - Start Download Task
 app.post('/api/download/start', (req: Request, res: Response) => {
   try {
-    const { slug, gatewayToken } = req.body;
-    if (!slug || !gatewayToken) {
-      return res.status(400).json({ success: false, error: 'Missing gateway authorization parameters.' });
+    const { slug } = req.body;
+    if (!slug) {
+      return res.status(400).json({ success: false, error: 'Missing slug parameter.' });
     }
 
-    if (!db.isGatewayCompleted(slug, gatewayToken)) {
-      return res.status(401).json({ success: false, error: 'Invalid or expired gateway token.' });
+    const video = db.getVideoBySlug(slug) || db.getBloggerBySlug(slug);
+    if (!video) {
+      return res.status(404).json({ success: false, notFound: true, error: 'Download source video not found.' });
     }
 
     const visitorInfo = getVisitorInfo(req);
@@ -524,28 +487,11 @@ app.post('/api/download/verify', (req: Request, res: Response) => {
   }
 });
 
-// 7. GET /api/telegram/:slug - Telegram File Details (Requires Gateway Access)
+// 7. GET /api/telegram/:slug - Telegram File Details
 app.get('/api/telegram/:slug', (req: Request, res: Response) => {
   try {
     const { slug } = req.params;
-    const token = req.query.token as string;
-
     const visitorInfo = getVisitorInfo(req);
-
-    if (!token || !db.isGatewayCompleted(slug, token)) {
-      db.logVisitor({
-        ...visitorInfo,
-        path: `/tg/${slug}`,
-        slug,
-        event: 'unauthorized_telegram_access_attempt',
-      });
-
-      return res.status(401).json({
-        success: false,
-        requiresGateway: true,
-        error: 'Unauthorized access. You must complete the task gateway before accessing this file.',
-      });
-    }
 
     const tgFile = db.getTelegramFileBySlug(slug);
     if (!tgFile) {

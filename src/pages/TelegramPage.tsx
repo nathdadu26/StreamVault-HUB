@@ -11,15 +11,11 @@ interface TelegramPageProps {
 }
 
 export const TelegramPage: React.FC<TelegramPageProps> = ({ slug }) => {
-  const queryParams = new URLSearchParams(window.location.search);
-  const gatewayToken = queryParams.get('token') || '';
-
   const [loading, setLoading] = useState(true);
   const [tgFile, setTgFile] = useState<TelegramFileItem | null>(null);
   const [botUsername, setBotUsername] = useState<string>('file_server_bot');
   const [telegramUrl, setTelegramUrl] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
-  const [requiresGateway, setRequiresGateway] = useState(false);
   const [isNotFound, setIsNotFound] = useState(false);
 
   useEffect(() => {
@@ -27,17 +23,9 @@ export const TelegramPage: React.FC<TelegramPageProps> = ({ slug }) => {
     async function load() {
       setLoading(true);
       setError(null);
-      setRequiresGateway(false);
       setIsNotFound(false);
 
-      if (!gatewayToken) {
-        setRequiresGateway(true);
-        setError('Unauthorized access. Gateway token is missing or expired.');
-        setLoading(false);
-        return;
-      }
-
-      const res = await fetchTelegramFile(slug, gatewayToken);
+      const res = await fetchTelegramFile(slug);
       if (isMounted) {
         if (res.success && res.data) {
           setTgFile(res.data);
@@ -46,8 +34,6 @@ export const TelegramPage: React.FC<TelegramPageProps> = ({ slug }) => {
         } else {
           if (res.notFound) {
             setIsNotFound(true);
-          } else if (res.requiresGateway) {
-            setRequiresGateway(true);
           }
           setError(res.error || 'Failed to retrieve Telegram file details.');
         }
@@ -58,7 +44,7 @@ export const TelegramPage: React.FC<TelegramPageProps> = ({ slug }) => {
     return () => {
       isMounted = false;
     };
-  }, [slug, gatewayToken]);
+  }, [slug]);
 
   if (loading) {
     return (
@@ -79,13 +65,13 @@ export const TelegramPage: React.FC<TelegramPageProps> = ({ slug }) => {
     );
   }
 
-  if (requiresGateway || error || !tgFile) {
+  if (error || !tgFile) {
     return (
       <ErrorState
-        type="401"
+        type="404"
         slug={slug}
-        title="Unauthorized Telegram Gateway"
-        message={error || 'Direct access is forbidden. You must complete the task gateway first.'}
+        title="Telegram File Not Found"
+        message={error || 'Unable to retrieve Telegram file.'}
       />
     );
   }

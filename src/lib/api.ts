@@ -51,11 +51,10 @@ export async function verifyGatewayTask(
 }
 
 export async function fetchPlayerStream(
-  slug: string,
-  gatewayToken: string
-): Promise<{ success: boolean; data?: VideoItem; requiresGateway?: boolean; notFound?: boolean; error?: string }> {
+  slug: string
+): Promise<{ success: boolean; data?: VideoItem; notFound?: boolean; error?: string }> {
   try {
-    const res = await fetch(`/api/player/${encodeURIComponent(slug)}?token=${encodeURIComponent(gatewayToken)}`);
+    const res = await fetch(`/api/player/${encodeURIComponent(slug)}`);
     return await res.json();
   } catch (err: any) {
     return { success: false, error: 'Failed to load video player stream.' };
@@ -63,11 +62,10 @@ export async function fetchPlayerStream(
 }
 
 export async function fetchBloggerStream(
-  slug: string,
-  gatewayToken: string
-): Promise<{ success: boolean; data?: BloggerItem; requiresGateway?: boolean; notFound?: boolean; error?: string }> {
+  slug: string
+): Promise<{ success: boolean; data?: BloggerItem; notFound?: boolean; error?: string }> {
   try {
-    const res = await fetch(`/api/blogger/${encodeURIComponent(slug)}?token=${encodeURIComponent(gatewayToken)}`);
+    const res = await fetch(`/api/blogger/${encodeURIComponent(slug)}`);
     return await res.json();
   } catch (err: any) {
     return { success: false, error: 'Failed to load Blogger video stream.' };
@@ -75,14 +73,13 @@ export async function fetchBloggerStream(
 }
 
 export async function startDownloadTask(
-  slug: string,
-  gatewayToken: string
+  slug: string
 ): Promise<GatewaySessionResponse> {
   try {
     const res = await fetch('/api/download/start', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ slug, gatewayToken }),
+      body: JSON.stringify({ slug }),
     });
     return await res.json();
   } catch (err: any) {
@@ -107,11 +104,10 @@ export async function verifyDownloadTask(
 }
 
 export async function fetchTelegramFile(
-  slug: string,
-  gatewayToken: string
-): Promise<{ success: boolean; data?: TelegramFileItem; botUsername?: string; telegramUrl?: string; requiresGateway?: boolean; notFound?: boolean; error?: string }> {
+  slug: string
+): Promise<{ success: boolean; data?: TelegramFileItem; botUsername?: string; telegramUrl?: string; notFound?: boolean; error?: string }> {
   try {
-    const res = await fetch(`/api/telegram/${encodeURIComponent(slug)}?token=${encodeURIComponent(gatewayToken)}`);
+    const res = await fetch(`/api/telegram/${encodeURIComponent(slug)}`);
     return await res.json();
   } catch (err: any) {
     return { success: false, error: 'Failed to retrieve Telegram file details.' };

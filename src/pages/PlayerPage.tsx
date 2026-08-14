@@ -15,37 +15,22 @@ export const PlayerPage: React.FC<PlayerPageProps> = ({ slug }) => {
   const [loading, setLoading] = useState(true);
   const [video, setVideo] = useState<VideoItem | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [requiresGateway, setRequiresGateway] = useState(false);
   const [isNotFound, setIsNotFound] = useState(false);
-
-  // Extract token from query param
-  const queryParams = new URLSearchParams(window.location.search);
-  const gatewayToken = queryParams.get('token') || '';
 
   useEffect(() => {
     let isMounted = true;
     async function load() {
       setLoading(true);
       setError(null);
-      setRequiresGateway(false);
       setIsNotFound(false);
 
-      if (!gatewayToken) {
-        setRequiresGateway(true);
-        setError('Unauthorized access. Gateway token is missing or expired.');
-        setLoading(false);
-        return;
-      }
-
-      const res = await fetchPlayerStream(slug, gatewayToken);
+      const res = await fetchPlayerStream(slug);
       if (isMounted) {
         if (res.success && res.data) {
           setVideo(res.data);
         } else {
           if (res.notFound) {
             setIsNotFound(true);
-          } else if (res.requiresGateway) {
-            setRequiresGateway(true);
           }
           setError(res.error || 'Failed to access video stream.');
         }
@@ -56,7 +41,7 @@ export const PlayerPage: React.FC<PlayerPageProps> = ({ slug }) => {
     return () => {
       isMounted = false;
     };
-  }, [slug, gatewayToken]);
+  }, [slug]);
 
   if (loading) {
     return (
@@ -77,13 +62,13 @@ export const PlayerPage: React.FC<PlayerPageProps> = ({ slug }) => {
     );
   }
 
-  if (requiresGateway || error || !video) {
+  if (error || !video) {
     return (
       <ErrorState
-        type="401"
+        type="404"
         slug={slug}
-        title="Unauthorized Video Access"
-        message={error || 'Direct access is strictly forbidden. You must complete the task gateway first.'}
+        title="Video Not Found"
+        message={error || 'Unable to load video stream.'}
       />
     );
   }
@@ -123,7 +108,7 @@ export const PlayerPage: React.FC<PlayerPageProps> = ({ slug }) => {
 
         {/* Download Button */}
         <a
-          href={`/dl/${slug}?token=${gatewayToken}`}
+          href={`/dl/${slug}`}
           className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm px-4 py-2 rounded-xl flex items-center gap-1.5 shadow-2xs transition cursor-pointer shrink-0"
           id="download-video-btn"
         >

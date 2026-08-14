@@ -24,9 +24,6 @@ interface DownloadPageProps {
 }
 
 export const DownloadPage: React.FC<DownloadPageProps> = ({ slug }) => {
-  const queryParams = new URLSearchParams(window.location.search);
-  const gatewayToken = queryParams.get('token') || '';
-
   const [downloadTaskState, setDownloadTaskState] = useState<TaskState>({
     taskNumber: 3,
     status: 'pending',
@@ -52,19 +49,8 @@ export const DownloadPage: React.FC<DownloadPageProps> = ({ slug }) => {
     return () => clearInterval(interval);
   }, [downloadTaskState.status, downloadTaskState.countdownRemaining]);
 
-  if (!gatewayToken) {
-    return (
-      <ErrorState
-        type="401"
-        slug={slug}
-        title="Download Unauthorized"
-        message="You must complete the gateway task on /ad/{slug} before accessing the download center."
-      />
-    );
-  }
-
   const handleStartDownloadTask = async () => {
-    const res = await startDownloadTask(slug, gatewayToken);
+    const res = await startDownloadTask(slug);
     if (res.success && res.sessionToken && res.taskUrl) {
       setDownloadTaskState({
         taskNumber: 3,

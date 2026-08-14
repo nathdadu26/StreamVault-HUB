@@ -44,8 +44,7 @@ export const AdTaskGatewayPage: React.FC<AdTaskGatewayPageProps> = ({ slug }) =>
   });
   const [isVerifying2, setIsVerifying2] = useState(false);
 
-  // Unlocked master token & redirect URL
-  const [masterGatewayToken, setMasterGatewayToken] = useState<string | null>(null);
+  // Unlocked redirect URL
   const [unlockedRedirectUrl, setUnlockedRedirectUrl] = useState<string | null>(null);
 
   // Timer countdown handler for Task 1
@@ -171,9 +170,10 @@ export const AdTaskGatewayPage: React.FC<AdTaskGatewayPageProps> = ({ slug }) =>
         status: 'completed',
         errorMessage: undefined,
       }));
-      if (res.gatewayToken && res.redirectUrl) {
-        setMasterGatewayToken(res.gatewayToken);
+      if (res.redirectUrl) {
         setUnlockedRedirectUrl(res.redirectUrl);
+      } else if (resource?.destinationPath) {
+        setUnlockedRedirectUrl(resource.destinationPath);
       }
     } else {
       setTask2State((prev) => ({
