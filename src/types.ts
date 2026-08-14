@@ -9,6 +9,16 @@ export interface VideoItem {
   updated_at: string;
 }
 
+export interface BloggerItem {
+  id: string;
+  slug: string;
+  title: string;
+  video_link: string;
+  views: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface TelegramFileItem {
   id: string;
   slug: string;
@@ -50,8 +60,8 @@ export interface TaskVerifyResponse {
 
 export interface ResourceInfoResponse {
   success: boolean;
-  type?: 'video' | 'telegram';
-  data?: VideoItem | TelegramFileItem;
+  type?: 'video' | 'blogger' | 'telegram';
+  data?: VideoItem | BloggerItem | TelegramFileItem;
   error?: string;
   requiresGateway?: boolean;
   botUsername?: string;

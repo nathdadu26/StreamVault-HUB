@@ -3,6 +3,7 @@ import {
   GatewaySessionResponse,
   TaskVerifyResponse,
   VideoItem,
+  BloggerItem,
   TelegramFileItem,
 } from '../types';
 
@@ -58,6 +59,18 @@ export async function fetchPlayerStream(
     return await res.json();
   } catch (err: any) {
     return { success: false, error: 'Failed to load video player stream.' };
+  }
+}
+
+export async function fetchBloggerStream(
+  slug: string,
+  gatewayToken: string
+): Promise<{ success: boolean; data?: BloggerItem; requiresGateway?: boolean; notFound?: boolean; error?: string }> {
+  try {
+    const res = await fetch(`/api/blogger/${encodeURIComponent(slug)}?token=${encodeURIComponent(gatewayToken)}`);
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, error: 'Failed to load Blogger video stream.' };
   }
 }
 

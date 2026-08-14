@@ -13,6 +13,16 @@ export interface VideoRecord {
   updated_at: string;
 }
 
+export interface BloggerRecord {
+  id: string;
+  slug: string;
+  title: string;
+  video_link: string;
+  views: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface TelegramFileRecord {
   id: string;
   slug: string;
@@ -52,6 +62,7 @@ export interface GatewaySessionRecord {
 
 interface DatabaseSchema {
   videos_db: VideoRecord[];
+  blogger_db: BloggerRecord[];
   telegram_files: TelegramFileRecord[];
   visitors: VisitorRecord[];
   gateway_sessions: GatewaySessionRecord[];
@@ -62,6 +73,7 @@ const DATA_FILE = path.join(process.cwd(), 'd1_storage.json');
 class D1Database {
   private data: DatabaseSchema = {
     videos_db: [],
+    blogger_db: [],
     telegram_files: [],
     visitors: [],
     gateway_sessions: [],
@@ -77,6 +89,9 @@ class D1Database {
       if (fs.existsSync(DATA_FILE)) {
         const raw = fs.readFileSync(DATA_FILE, 'utf-8');
         this.data = JSON.parse(raw);
+        if (!this.data.blogger_db) {
+          this.data.blogger_db = [];
+        }
       }
     } catch (err) {
       console.error('Failed to load D1 storage file, starting fresh', err);
@@ -92,7 +107,7 @@ class D1Database {
   }
 
   private seedDefaults() {
-    if (this.data.videos_db.length === 0) {
+    if (!this.data.videos_db || this.data.videos_db.length === 0) {
       const defaultVideos: VideoRecord[] = [
         {
           id: 'v_1',
@@ -128,7 +143,31 @@ class D1Database {
       this.data.videos_db = defaultVideos;
     }
 
-    if (this.data.telegram_files.length === 0) {
+    if (!this.data.blogger_db || this.data.blogger_db.length === 0) {
+      const defaultBloggerVideos: BloggerRecord[] = [
+        {
+          id: 'bl_1',
+          slug: 'blogger-stream-sample',
+          title: 'Premium Blogger Hosted Video Showcase Stream',
+          video_link: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+          views: 1250,
+          created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        {
+          id: 'bl_2',
+          slug: 'tech-review-blogger',
+          title: 'Next-Gen Edge Cloud Infrastructure Breakdown & Review',
+          video_link: 'https://www.youtube.com/embed/L_LUpnjgPso',
+          views: 3120,
+          created_at: new Date(Date.now() - 86400000 * 4).toISOString(),
+          updated_at: new Date().toISOString(),
+        }
+      ];
+      this.data.blogger_db = defaultBloggerVideos;
+    }
+
+    if (!this.data.telegram_files || this.data.telegram_files.length === 0) {
       const defaultTgFiles: TelegramFileRecord[] = [
         {
           id: 'tg_1',
@@ -188,6 +227,46 @@ class D1Database {
 
   getAllVideos(): VideoRecord[] {
     return [...this.data.videos_db];
+  }
+
+  // Blogger DB operations
+  getBloggerBySlug(slug: string): BloggerRecord | undefined {
+    return this.data.blogger_db?.find((b) => b.slug === slug);
+  }
+
+  addBloggerVideo(video: Omit<BloggerRecord, 'id' | 'views' | 'created_at' | 'updated_at'>): BloggerRecord {
+    const existing = this.getBloggerBySlug(video.slug);
+    if (existing) {
+      throw new Error('Blogger video slug already exists in blogger_db');
+    }
+    const newRecord: BloggerRecord = {
+      id: `bl_${crypto.randomUUID()}`,
+      views: 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      ...video,
+    };
+    if (!this.data.blogger_db) {
+      this.data.blogger_db = [];
+    }
+    this.data.blogger_db.unshift(newRecord);
+    this.save();
+    return newRecord;
+  }
+
+  incrementBloggerViews(slug: string): number {
+    const video = this.data.blogger_db?.find((b) => b.slug === slug);
+    if (video) {
+      video.views += 1;
+      video.updated_at = new Date().toISOString();
+      this.save();
+      return video.views;
+    }
+    return 0;
+  }
+
+  getAllBloggerVideos(): BloggerRecord[] {
+    return [...(this.data.blogger_db || [])];
   }
 
   // Telegram files operations

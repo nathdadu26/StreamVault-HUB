@@ -3,6 +3,7 @@ import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 import { AdTaskGatewayPage } from './pages/AdTaskGatewayPage';
 import { PlayerPage } from './pages/PlayerPage';
+import { BloggerPage } from './pages/BloggerPage';
 import { DownloadPage } from './pages/DownloadPage';
 import { TelegramPage } from './pages/TelegramPage';
 import { HomePage } from './pages/HomePage';
@@ -46,7 +47,7 @@ export default function App() {
 
   // Route parsing
   const parts = pathname.split('/').filter(Boolean);
-  const routeType = parts[0]; // 'ad', 's', 'dl', 'tg', or empty
+  const routeType = parts[0]; // 'ad', 's', 'bl', 'dl', 'tg', or empty
   const slug = parts[1] || '';
 
   const renderContent = () => {
@@ -56,6 +57,10 @@ export default function App() {
 
     if (routeType === 's' && slug) {
       return <PlayerPage slug={slug} />;
+    }
+
+    if (routeType === 'bl' && slug) {
+      return <BloggerPage slug={slug} />;
     }
 
     if (routeType === 'dl' && slug) {

@@ -84,7 +84,7 @@ app.get('/api/resource/:slug', (req: Request, res: Response) => {
     const { slug } = req.params;
     const visitorInfo = getVisitorInfo(req);
 
-    // Search in videos_db first, then telegram_files
+    // Search in videos_db first, then blogger_db, then telegram_files
     const video = db.getVideoBySlug(slug);
     if (video) {
       db.logVisitor({
@@ -105,6 +105,27 @@ app.get('/api/resource/:slug', (req: Request, res: Response) => {
           views: video.views,
           created_at: video.created_at,
           updated_at: video.updated_at,
+        },
+      });
+    }
+
+    const blogger = db.getBloggerBySlug(slug);
+    if (blogger) {
+      db.logVisitor({
+        ...visitorInfo,
+        path: `/ad/${slug}`,
+        slug,
+        event: 'gateway_view_blogger',
+      });
+
+      return res.json({
+        success: true,
+        type: 'blogger',
+        data: {
+          id: blogger.id,
+          slug: blogger.slug,
+          title: blogger.title,
+          views: blogger.views,
         },
       });
     }
@@ -157,8 +178,9 @@ app.post('/api/gateway/task/start', (req: Request, res: Response) => {
     }
 
     const video = db.getVideoBySlug(slug);
+    const blogger = db.getBloggerBySlug(slug);
     const tgFile = db.getTelegramFileBySlug(slug);
-    if (!video && !tgFile) {
+    if (!video && !blogger && !tgFile) {
       return res.status(404).json({ success: false, error: 'Resource not found for this gateway.' });
     }
 
@@ -265,8 +287,14 @@ app.post('/api/gateway/task/verify', (req: Request, res: Response) => {
     // Task 2 completed -> Issue Master Gateway Token
     const masterGatewayToken = db.createMasterGatewayToken(slug, session.visitor_id);
 
+    const isBlogger = !!db.getBloggerBySlug(slug);
     const isVideo = !!db.getVideoBySlug(slug);
-    const redirectUrl = isVideo ? `/s/${slug}?token=${masterGatewayToken}` : `/tg/${slug}?token=${masterGatewayToken}`;
+    let redirectUrl = `/tg/${slug}?token=${masterGatewayToken}`;
+    if (isBlogger) {
+      redirectUrl = `/bl/${slug}?token=${masterGatewayToken}`;
+    } else if (isVideo) {
+      redirectUrl = `/s/${slug}?token=${masterGatewayToken}`;
+    }
 
     return res.json({
       success: true,
@@ -326,6 +354,56 @@ app.get('/api/player/:slug', (req: Request, res: Response) => {
     });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: 'Failed to retrieve video player stream.' });
+  }
+});
+
+// 4b. GET /api/blogger/:slug - Blogger Video Details (Requires Gateway Access)
+app.get('/api/blogger/:slug', (req: Request, res: Response) => {
+  try {
+    const { slug } = req.params;
+    const token = req.query.token as string;
+
+    const visitorInfo = getVisitorInfo(req);
+
+    if (!token || !db.isGatewayCompleted(slug, token)) {
+      db.logVisitor({
+        ...visitorInfo,
+        path: `/bl/${slug}`,
+        slug,
+        event: 'unauthorized_blogger_access_attempt',
+      });
+
+      return res.status(401).json({
+        success: false,
+        requiresGateway: true,
+        error: 'Unauthorized access. You must complete the task gateway before watching this video.',
+      });
+    }
+
+    const video = db.getBloggerBySlug(slug);
+    if (!video) {
+      return res.status(404).json({ success: false, notFound: true, error: 'Blogger video not found.' });
+    }
+
+    // Increment views counter safely server-side
+    const newViews = db.incrementBloggerViews(slug);
+
+    db.logVisitor({
+      ...visitorInfo,
+      path: `/bl/${slug}`,
+      slug,
+      event: 'authorized_blogger_view',
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        ...video,
+        views: newViews,
+      },
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: 'Failed to retrieve Blogger video stream.' });
   }
 });
 
@@ -404,7 +482,7 @@ app.post('/api/download/verify', (req: Request, res: Response) => {
 
     db.updateSession(sessionToken, { status: 'completed', completed_at: Date.now() });
 
-    const video = db.getVideoBySlug(slug);
+    const video = db.getVideoBySlug(slug) || db.getBloggerBySlug(slug);
     if (!video) {
       return res.status(404).json({ success: false, error: 'Download source video not found.' });
     }
@@ -489,10 +567,12 @@ app.get('/api/config', (req: Request, res: Response) => {
 app.get('/api/items', (req: Request, res: Response) => {
   try {
     const videos = db.getAllVideos();
+    const bloggerVideos = db.getAllBloggerVideos();
     const telegramFiles = db.getAllTelegramFiles();
     return res.json({
       success: true,
       videos,
+      bloggerVideos,
       telegramFiles,
     });
   } catch (err: any) {
