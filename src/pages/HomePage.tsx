@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link2Off } from 'lucide-react';
 import { AdBanner } from '../components/AdBanner';
 
 export const HomePage: React.FC = () => {
@@ -13,7 +14,7 @@ export const HomePage: React.FC = () => {
         id="invalid-link-card"
       >
         <div className="w-14 h-14 rounded-[20px] bg-rose-50 border border-rose-200 text-rose-600 dark:bg-rose-500/10 dark:border-rose-500/20 dark:text-rose-400 flex items-center justify-center shrink-0">
-          <i className="fi fi-tc-broken-chain-link-wrong text-2xl flex items-center justify-center"></i>
+          <Link2Off className="w-6 h-6" strokeWidth={2} />
         </div>
 
         <div className="space-y-1.5">

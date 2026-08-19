@@ -4,7 +4,7 @@ import { BloggerItem } from '../types';
 import { AdBanner } from '../components/AdBanner';
 import { PlayerSkeleton } from '../components/SkeletonLoaders';
 import { ErrorState } from '../components/ErrorState';
-import { Download, Eye, Play } from 'lucide-react';
+import { Eye, Play } from 'lucide-react';
 
 interface BloggerPageProps {
   slug: string;
@@ -44,7 +44,7 @@ export const BloggerPage: React.FC<BloggerPageProps> = ({ slug }) => {
 
   if (loading) {
     return (
-      <div className="py-8 px-4 max-w-md mx-auto">
+      <div className="pt-1 pb-8 px-4 max-w-md mx-auto">
         <PlayerSkeleton />
       </div>
     );
@@ -73,7 +73,7 @@ export const BloggerPage: React.FC<BloggerPageProps> = ({ slug }) => {
   }
 
   return (
-    <div className="max-w-2xl mx-auto py-4 sm:py-6 space-y-6 animate-fadeIn">
+    <div className="max-w-2xl mx-auto pt-0 pb-6 sm:pb-8 space-y-5 animate-fadeIn">
       {/* Blogger Video Player Iframe Container (Direct Iframe) */}
       <div className="w-full aspect-video rounded-[20px] overflow-hidden shadow-xl shadow-black/30 border border-neutral-200 dark:border-white/[0.08] bg-black">
         <iframe
@@ -85,36 +85,31 @@ export const BloggerPage: React.FC<BloggerPageProps> = ({ slug }) => {
         />
       </div>
 
-      {/* Title & Download Info Card */}
-      <div className="bg-white dark:bg-[#141416] border border-neutral-200 dark:border-white/[0.08] rounded-[20px] p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm dark:shadow-lg dark:shadow-black/20 transition-colors duration-200">
-        <div className="flex items-center gap-3.5 min-w-0 pr-2">
-          <div className="w-11 h-11 rounded-[14px] bg-neutral-100 dark:bg-white/[0.06] border border-neutral-200 dark:border-white/[0.08] text-[#111111] dark:text-white flex items-center justify-center shrink-0">
-            <Play className="w-5 h-5 fill-current text-[#111111] dark:text-white" strokeWidth={0} />
-          </div>
-
-          <div className="min-w-0">
+      {/* Title & Status Info Card */}
+      <div className="bg-white dark:bg-[#141416] border border-neutral-200 dark:border-white/[0.08] rounded-[20px] p-5 sm:p-6 flex flex-col gap-4 shadow-sm dark:shadow-lg dark:shadow-black/20 transition-colors duration-200">
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2">
+            <Play className="w-4 h-4 fill-current text-[#111111] dark:text-white shrink-0" strokeWidth={0} />
             <h1 className="font-bold text-[#111111] dark:text-white text-base sm:text-lg leading-snug truncate tracking-tight">
               {video.title}
             </h1>
+          </div>
 
-            <div className="flex items-center gap-2.5 text-xs text-neutral-500 dark:text-neutral-400 mt-1 font-medium">
-              <span className="flex items-center gap-1">
-                <Eye className="w-3.5 h-3.5 text-neutral-400 dark:text-neutral-500" />
-                {video.views} Views
-              </span>
-            </div>
+          <div className="flex items-center gap-2.5 text-xs text-neutral-500 dark:text-neutral-400 font-medium">
+            <span className="flex items-center gap-1">
+              <Eye className="w-3.5 h-3.5 text-neutral-400 dark:text-neutral-500" />
+              {video.views} Views
+            </span>
           </div>
         </div>
 
-        {/* Download Button */}
-        <a
-          href={`/dl/${slug}`}
-          className="h-11 px-5 rounded-[20px] bg-white border border-neutral-200 hover:bg-neutral-50 text-[#111111] dark:bg-white dark:border-transparent dark:text-black dark:hover:bg-neutral-200 font-semibold text-sm flex items-center justify-center gap-2 shadow-sm transition-all duration-200 cursor-pointer shrink-0"
-          id="download-video-btn"
+        {/* Full-width Download Unavailable Notice */}
+        <div
+          className="w-full py-3.5 px-4 rounded-[14px] bg-emerald-500/10 dark:bg-emerald-500/15 border border-emerald-500/20 dark:border-emerald-500/30 text-center font-medium text-sm text-[#111111] dark:text-white transition-colors duration-200"
+          id="download-unavailable-notice"
         >
-          <Download className="w-4 h-4 text-[#111111] dark:text-black" strokeWidth={2} />
-          <span>Download</span>
-        </a>
+          Download not available for this video.
+        </div>
       </div>
 
       {/* Advertisement Banner */}
