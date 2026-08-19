@@ -73,9 +73,9 @@ export const BloggerPage: React.FC<BloggerPageProps> = ({ slug }) => {
   }
 
   return (
-    <div className="max-w-md mx-auto px-4 py-5 space-y-4 animate-fadeIn">
+    <div className="max-w-2xl mx-auto py-4 sm:py-6 space-y-6 animate-fadeIn">
       {/* Blogger Video Player Iframe Container (Direct Iframe) */}
-      <div className="w-full aspect-video rounded-2xl overflow-hidden shadow-2xs border border-slate-200/80 dark:border-slate-800 bg-black">
+      <div className="w-full aspect-video rounded-[20px] overflow-hidden shadow-xl shadow-black/30 border border-neutral-200 dark:border-white/[0.08] bg-black">
         <iframe
           src={video.video_link}
           title={video.title}
@@ -86,20 +86,20 @@ export const BloggerPage: React.FC<BloggerPageProps> = ({ slug }) => {
       </div>
 
       {/* Title & Download Info Card */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 flex items-center justify-between shadow-2xs">
-        <div className="flex items-center gap-3 min-w-0 pr-2">
-          <div className="w-10 h-10 rounded-xl bg-purple-100 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
-            <Play className="w-5 h-5 fill-purple-600 dark:fill-purple-400" />
+      <div className="bg-white dark:bg-[#141416] border border-neutral-200 dark:border-white/[0.08] rounded-[20px] p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm dark:shadow-lg dark:shadow-black/20 transition-colors duration-200">
+        <div className="flex items-center gap-3.5 min-w-0 pr-2">
+          <div className="w-11 h-11 rounded-[14px] bg-neutral-100 dark:bg-white/[0.06] border border-neutral-200 dark:border-white/[0.08] text-[#111111] dark:text-white flex items-center justify-center shrink-0">
+            <Play className="w-5 h-5 fill-current text-[#111111] dark:text-white" strokeWidth={0} />
           </div>
 
           <div className="min-w-0">
-            <h1 className="font-bold text-slate-900 dark:text-white text-base leading-snug truncate">
+            <h1 className="font-bold text-[#111111] dark:text-white text-base sm:text-lg leading-snug truncate tracking-tight">
               {video.title}
             </h1>
 
-            <div className="flex items-center gap-2.5 text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-medium">
+            <div className="flex items-center gap-2.5 text-xs text-neutral-500 dark:text-neutral-400 mt-1 font-medium">
               <span className="flex items-center gap-1">
-                <Eye className="w-3.5 h-3.5 text-slate-400" />
+                <Eye className="w-3.5 h-3.5 text-neutral-400 dark:text-neutral-500" />
                 {video.views} Views
               </span>
             </div>
@@ -109,10 +109,10 @@ export const BloggerPage: React.FC<BloggerPageProps> = ({ slug }) => {
         {/* Download Button */}
         <a
           href={`/dl/${slug}`}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm px-4 py-2 rounded-xl flex items-center gap-1.5 shadow-2xs transition cursor-pointer shrink-0"
+          className="h-11 px-5 rounded-[20px] bg-white border border-neutral-200 hover:bg-neutral-50 text-[#111111] dark:bg-white dark:border-transparent dark:text-black dark:hover:bg-neutral-200 font-semibold text-sm flex items-center justify-center gap-2 shadow-sm transition-all duration-200 cursor-pointer shrink-0"
           id="download-video-btn"
         >
-          <Download className="w-4 h-4" />
+          <Download className="w-4 h-4 text-[#111111] dark:text-black" strokeWidth={2} />
           <span>Download</span>
         </a>
       </div>

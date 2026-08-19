@@ -20,39 +20,39 @@ export const ErrorState: React.FC<ErrorStateProps> = ({
   const is404 = type === '404';
 
   return (
-    <div className="w-full max-w-md mx-auto my-12 p-8 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl text-center flex flex-col items-center gap-4 animate-scaleUp">
+    <div className="w-full max-w-md mx-auto my-8 p-8 rounded-[20px] bg-white dark:bg-[#141416] border border-neutral-200 dark:border-white/[0.08] shadow-sm dark:shadow-xl dark:shadow-black/30 text-center flex flex-col items-center gap-5 animate-fadeIn transition-colors duration-200">
       <div
-        className={`w-16 h-16 rounded-2xl flex items-center justify-center ${
+        className={`w-14 h-14 rounded-[20px] flex items-center justify-center border ${
           is401
-            ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400'
+            ? 'bg-neutral-100 border-neutral-200 text-[#111111] dark:bg-white/[0.06] dark:border-white/[0.1] dark:text-white'
             : is404
-            ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400'
-            : 'bg-slate-100 dark:bg-slate-800 text-slate-600'
+            ? 'bg-rose-50 border-rose-200 text-rose-600 dark:bg-rose-500/10 dark:border-rose-500/20 dark:text-rose-400'
+            : 'bg-neutral-100 border-neutral-200 text-neutral-700 dark:bg-white/[0.06] dark:border-white/[0.1] dark:text-neutral-300'
         }`}
       >
         {is401 ? (
-          <Lock className="w-8 h-8" />
+          <Lock className="w-6 h-6" strokeWidth={1.75} />
         ) : is404 ? (
-          <AlertTriangle className="w-8 h-8" />
+          <AlertTriangle className="w-6 h-6" strokeWidth={1.75} />
         ) : (
-          <ShieldAlert className="w-8 h-8" />
+          <ShieldAlert className="w-6 h-6" strokeWidth={1.75} />
         )}
       </div>
 
-      <div>
-        <h2 className="text-xl font-bold text-slate-900 dark:text-white">{title}</h2>
-        <p className="text-sm text-slate-600 dark:text-slate-400 mt-2 leading-relaxed">
+      <div className="space-y-1.5">
+        <h2 className="text-xl font-bold text-[#111111] dark:text-white tracking-tight">{title}</h2>
+        <p className="text-sm text-neutral-600 dark:text-neutral-400 leading-relaxed max-w-xs mx-auto">
           {message}
         </p>
       </div>
 
-      <div className="w-full flex flex-col gap-2.5 mt-2">
+      <div className="w-full flex flex-col gap-3 mt-2">
         {is401 && slug && (
           <a
             href={`/ad/${slug}`}
-            className="w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-md shadow-blue-500/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2"
+            className="w-full h-11 px-5 rounded-[20px] bg-white border border-neutral-200 hover:bg-neutral-50 text-[#111111] dark:bg-white dark:border-transparent dark:text-black dark:hover:bg-neutral-200 font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer shadow-sm"
           >
-            <Lock className="w-4 h-4" />
+            <Lock className="w-4 h-4 text-[#111111] dark:text-black" strokeWidth={2} />
             <span>Go to Task Gateway (/ad/{slug})</span>
           </a>
         )}
@@ -60,21 +60,22 @@ export const ErrorState: React.FC<ErrorStateProps> = ({
         {onRetry && (
           <button
             onClick={onRetry}
-            className="w-full py-3 px-4 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold text-sm transition-all flex items-center justify-center gap-2"
+            className="w-full h-11 px-5 rounded-[20px] bg-white border border-neutral-200 text-[#111111] hover:bg-neutral-50 dark:bg-transparent dark:border-white/[0.12] dark:text-neutral-200 dark:hover:bg-white/[0.05] dark:hover:text-white font-medium text-sm transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer"
           >
-            <RefreshCw className="w-4 h-4" />
+            <RefreshCw className="w-4 h-4" strokeWidth={1.75} />
             <span>Retry Verification</span>
           </button>
         )}
 
         <a
           href="/"
-          className="w-full py-3 px-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-900 text-slate-600 dark:text-slate-400 font-medium text-xs transition-all flex items-center justify-center gap-1.5"
+          className="w-full h-11 px-5 rounded-[20px] bg-transparent border border-neutral-200 dark:border-white/[0.08] text-neutral-500 hover:bg-neutral-50 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-white/[0.04] dark:hover:text-neutral-200 font-medium text-xs transition-all duration-200 flex items-center justify-center gap-2"
         >
-          <ArrowLeft className="w-3.5 h-3.5" />
+          <ArrowLeft className="w-4 h-4" strokeWidth={1.75} />
           <span>Return to StreamVault HUB Portal</span>
         </a>
       </div>
     </div>
   );
 };
+

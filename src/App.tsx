@@ -13,11 +13,14 @@ export default function App() {
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('theme');
-      if (saved) {
-        return saved === 'dark';
+      if (saved === 'dark') return true;
+      if (saved === 'light') return false;
+      // First visit: respect system theme if available, otherwise default to night
+      if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+        return false;
       }
     }
-    return false; // Light theme by default
+    return true; // Night theme by default
   });
 
   // Synchronize dark class on documentElement and persist to localStorage
@@ -76,13 +79,15 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans transition-colors duration-200 selection:bg-blue-600 selection:text-white">
+    <div className="min-h-screen flex flex-col bg-[#FFFFFF] dark:bg-[#0B0B0C] text-[#111111] dark:text-[#EDEDED] font-['Inter',sans-serif] selection:bg-neutral-200 dark:selection:bg-white/20 selection:text-black dark:selection:text-white antialiased transition-colors duration-200">
       <Header
         isDarkMode={isDarkMode}
         onToggleTheme={handleToggleTheme}
       />
 
-      <main className="flex-1 w-full">{renderContent()}</main>
+      <main className="flex-1 w-full max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+        {renderContent()}
+      </main>
 
       <Footer />
     </div>

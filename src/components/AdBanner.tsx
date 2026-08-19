@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { fetchGatewayConfig } from '../lib/api';
+import { Image as ImageIcon } from 'lucide-react';
 
 interface AdBannerProps {
   className?: string;
@@ -27,7 +28,6 @@ function getEnvAdCode(): string {
   }
   return '';
 }
-
 
 export const AdBanner: React.FC<AdBannerProps> = ({
   className = '',
@@ -87,26 +87,33 @@ export const AdBanner: React.FC<AdBannerProps> = ({
       // Re-execute any script tags inside fragment for complete browser compatibility
       const scripts = Array.from(container.querySelectorAll('script')) as HTMLScriptElement[];
       scripts.forEach((oldScript) => {
-        const newScript = document.createElement('script');
-        Array.from(oldScript.attributes).forEach((attr) => {
-          newScript.setAttribute(attr.name, attr.value);
-        });
-        if (oldScript.innerHTML) {
-          newScript.innerHTML = oldScript.innerHTML;
+        try {
+          const newScript = document.createElement('script');
+          Array.from(oldScript.attributes).forEach((attr) => {
+            newScript.setAttribute(attr.name, attr.value);
+          });
+          newScript.onerror = () => {
+            // Silently absorb external ad script network/CORS failures
+          };
+          if (oldScript.innerHTML) {
+            newScript.innerHTML = oldScript.innerHTML;
+          }
+          oldScript.parentNode?.replaceChild(newScript, oldScript);
+        } catch (scriptErr) {
+          // Ignore individual script insertion failure
         }
-        oldScript.parentNode?.replaceChild(newScript, oldScript);
       });
-
-
     } catch (err) {
-      container.innerHTML = adCode;
+      try {
+        container.innerHTML = adCode;
+      } catch (_) {}
     }
   }, [adCode]);
 
   if (adCode) {
     return (
       <div
-        className={`w-full rounded-2xl border border-dashed border-purple-200 dark:border-purple-800/70 bg-purple-50/40 dark:bg-purple-950/20 p-4 flex flex-col items-center justify-center text-center overflow-hidden min-h-[250px] ${className}`}
+        className={`w-full rounded-[20px] border border-neutral-200 dark:border-white/[0.08] bg-white dark:bg-[#141416] p-4 flex flex-col items-center justify-center text-center overflow-hidden min-h-[250px] shadow-sm dark:shadow-lg dark:shadow-black/20 ${className}`}
         id="ad-banner-component"
       >
         <div ref={containerRef} className="w-full flex items-center justify-center overflow-hidden" />
@@ -116,33 +123,22 @@ export const AdBanner: React.FC<AdBannerProps> = ({
 
   return (
     <div
-      className={`w-full rounded-2xl border border-dashed border-purple-200 dark:border-purple-800/70 bg-purple-50/40 dark:bg-purple-950/20 p-8 flex flex-col items-center justify-center text-center select-none ${className}`}
+      className={`w-full rounded-[20px] border border-neutral-200 dark:border-white/[0.08] bg-white dark:bg-[#141416] p-8 flex flex-col items-center justify-center text-center select-none shadow-sm dark:shadow-lg dark:shadow-black/20 transition-all duration-200 ${className}`}
       id="ad-banner-component"
     >
-      {/* Inline SVG Image Icon in Purple */}
-      <div className="text-indigo-600 dark:text-indigo-400 mb-2">
-        <svg
-          className="w-10 h-10 stroke-current"
-          fill="none"
-          viewBox="0 0 24 24"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-          <circle cx="8.5" cy="8.5" r="1.5" />
-          <polyline points="21 15 16 10 5 21" />
-        </svg>
+      <div className="w-12 h-12 rounded-[16px] bg-neutral-100 dark:bg-[#1A1A1E] border border-neutral-200 dark:border-white/[0.06] flex items-center justify-center text-neutral-600 dark:text-neutral-400 mb-3">
+        <ImageIcon className="w-6 h-6" strokeWidth={1.5} />
       </div>
 
-      <span className="text-xs font-bold tracking-wide uppercase text-indigo-600 dark:text-indigo-400 mb-1">
+      <span className="text-[11px] font-semibold tracking-wider uppercase text-neutral-500 dark:text-neutral-400 mb-1">
         ADVERTISEMENT
       </span>
 
-      <span className="text-xs font-normal text-slate-400 dark:text-slate-500">
+      <span className="text-xs font-normal text-neutral-400 dark:text-neutral-500">
         {sizeLabel}
       </span>
     </div>
   );
 };
+
 

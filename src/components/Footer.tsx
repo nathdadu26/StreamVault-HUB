@@ -3,15 +3,16 @@ import { ShieldCheck } from 'lucide-react';
 
 export const Footer: React.FC = () => {
   return (
-    <footer className="mt-auto py-6 border-t border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-slate-950 transition-colors duration-200">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 flex flex-col items-center justify-center text-center">
-        <div className="w-9 h-9 rounded-full bg-blue-50 dark:bg-blue-950/60 border border-blue-200/80 dark:border-blue-800 flex items-center justify-center text-blue-600 dark:text-blue-400 mb-2">
-          <ShieldCheck className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+    <footer className="mt-auto py-8 border-t border-neutral-200 dark:border-white/[0.08] bg-[#FFFFFF] dark:bg-[#0B0B0C] transition-colors duration-200">
+      <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 flex flex-col items-center justify-center text-center gap-3">
+        <div className="w-8 h-8 rounded-[20px] bg-white dark:bg-[#141416] border border-neutral-200 dark:border-white/[0.08] flex items-center justify-center text-[#22C55E]">
+          <ShieldCheck className="w-4 h-4" strokeWidth={1.75} />
         </div>
-        <p className="text-xs text-slate-400 dark:text-slate-500 font-medium">
+        <p className="text-xs text-neutral-500 font-medium tracking-wide">
           © 2026 StreamVault HUB. All rights reserved.
         </p>
       </div>
     </footer>
   );
 };
+

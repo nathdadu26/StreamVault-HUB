@@ -79,7 +79,7 @@ export const TelegramPage: React.FC<TelegramPageProps> = ({ slug }) => {
   const generatedDeepLink = telegramUrl || `https://t.me/${botUsername}?start=${slug}`;
 
   return (
-    <div className="max-w-md mx-auto px-4 py-5 space-y-4 animate-fadeIn">
+    <div className="max-w-xl mx-auto py-4 sm:py-6 space-y-6 animate-fadeIn">
       {/* 1. ADVERTISEMENT BANNER */}
       <AdBanner />
 
@@ -88,27 +88,27 @@ export const TelegramPage: React.FC<TelegramPageProps> = ({ slug }) => {
         href={generatedDeepLink}
         target="_blank"
         rel="noopener noreferrer"
-        className="block bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 sm:p-6 shadow-2xs hover:border-blue-300 transition-colors group cursor-pointer"
+        className="block bg-white dark:bg-[#141416] border border-neutral-200 hover:border-neutral-300 dark:border-white/[0.08] dark:hover:border-white/[0.16] rounded-[20px] p-6 sm:p-7 shadow-sm dark:shadow-lg dark:shadow-black/20 transition-all duration-200 group cursor-pointer"
         id="telegram-bot-card"
       >
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3.5 min-w-0">
-            <div className="w-12 h-12 rounded-2xl bg-blue-100/80 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
-              <Bot className="w-6 h-6" />
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4 min-w-0">
+            <div className="w-12 h-12 rounded-[16px] bg-neutral-100 dark:bg-white/[0.06] border border-neutral-200 dark:border-white/[0.08] text-[#111111] dark:text-white flex items-center justify-center shrink-0">
+              <Bot className="w-6 h-6" strokeWidth={1.75} />
             </div>
 
             <div className="min-w-0">
-              <h2 className="font-bold text-slate-900 dark:text-white text-base mb-0.5 leading-snug">
+              <h2 className="font-bold text-[#111111] dark:text-white text-base sm:text-lg tracking-tight mb-1 leading-snug">
                 Click here to get video
               </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 leading-snug">
+              <p className="text-xs sm:text-sm text-neutral-600 dark:text-neutral-400 leading-relaxed">
                 This button will redirect you to our Telegram File Server Bot.
               </p>
             </div>
           </div>
 
-          <div className="w-10 h-10 rounded-xl border border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 group-hover:bg-blue-50 dark:group-hover:bg-blue-950/50 transition-colors">
-            <ExternalLink className="w-5 h-5" />
+          <div className="w-10 h-10 rounded-[14px] bg-neutral-100 dark:bg-white/[0.04] border border-neutral-200 dark:border-white/[0.08] text-[#111111] dark:text-neutral-400 group-hover:text-black dark:group-hover:text-white group-hover:bg-neutral-200 dark:group-hover:bg-white/[0.08] transition-all flex items-center justify-center shrink-0">
+            <ExternalLink className="w-4 h-4" strokeWidth={1.75} />
           </div>
         </div>
       </a>

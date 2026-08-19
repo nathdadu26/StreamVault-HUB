@@ -15,39 +15,48 @@ export const PlyrPlayer: React.FC<PlyrPlayerProps> = ({ src, poster, title }) =>
   useEffect(() => {
     if (!videoRef.current) return;
 
-    // Initialize Plyr player
-    playerRef.current = new Plyr(videoRef.current, {
-      controls: [
-        'play-large',
-        'play',
-        'progress',
-        'current-time',
-        'duration',
-        'mute',
-        'volume',
-        'captions',
-        'settings',
-        'pip',
-        'airplay',
-        'fullscreen',
-      ],
-      ratio: '16:9',
-      tooltips: { controls: true, seek: true },
-    });
+    try {
+      // Initialize Plyr player safely without external CDN sprite fetches
+      playerRef.current = new Plyr(videoRef.current, {
+        controls: [
+          'play-large',
+          'play',
+          'progress',
+          'current-time',
+          'duration',
+          'mute',
+          'volume',
+          'captions',
+          'settings',
+          'pip',
+          'airplay',
+          'fullscreen',
+        ],
+        ratio: '16:9',
+        tooltips: { controls: true, seek: true },
+        loadSprite: false,
+      });
+    } catch (err) {
+      console.warn('[PlyrPlayer] Initialization fallback:', err);
+    }
 
     return () => {
-      if (playerRef.current) {
-        playerRef.current.destroy();
-        playerRef.current = null;
+      try {
+        if (playerRef.current) {
+          playerRef.current.destroy();
+          playerRef.current = null;
+        }
+      } catch (err) {
+        // Ignore unmount teardown error
       }
     };
   }, [src]);
 
   return (
-    <div className="w-full rounded-2xl overflow-hidden bg-black shadow-xl border border-slate-800 relative group">
+    <div className="w-full rounded-[20px] overflow-hidden bg-[#0E0E10] shadow-lg shadow-black/40 border border-white/[0.08] relative group">
       <video
         ref={videoRef}
-        className="plyr-react plyr w-full aspect-video"
+        className="plyr-react plyr w-full aspect-video rounded-[20px]"
         playsInline
         controls
         poster={poster}

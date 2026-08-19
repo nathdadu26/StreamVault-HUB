@@ -1,32 +1,51 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>StreamVault HUB</title>
     <script>
+      // Global suppression for cross-origin third-party script errors in sandboxed iframes
+      window.onerror = function(msg, url, line, col, error) {
+        if (msg === 'Script error.' || msg === 'Script error' || (!url && !line)) {
+          return true;
+        }
+      };
+      window.onunhandledrejection = function(event) {
+        if (event && event.reason && typeof event.reason === 'string' && event.reason.includes('Script error')) {
+          event.preventDefault();
+          return true;
+        }
+      };
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn-uicons.flaticon.com/2.6.0/uicons-thin-chubby/css/uicons-thin-chubby.css" />
+    <link rel="stylesheet" href="https://cdn-uicons.flaticon.com/2.6.0/uicons-regular-rounded/css/uicons-regular-rounded.css" />
+    <script>
       (function() {
         try {
           var saved = localStorage.getItem('theme');
-          if (saved === 'dark') {
+          if (saved === 'light') {
+            document.documentElement.classList.remove('dark');
+          } else if (saved === 'dark') {
             document.documentElement.classList.add('dark');
           } else {
-            document.documentElement.classList.remove('dark');
+            // First visit: respect system theme if available, otherwise default to night
+            if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+              document.documentElement.classList.remove('dark');
+            } else {
+              document.documentElement.classList.add('dark');
+            }
           }
-        } catch (e) {}
+        } catch (e) {
+          document.documentElement.classList.add('dark');
+        }
       })();
     </script>
-    <!-- Flaticon UIcons stylesheets -->
-    <link rel="stylesheet" href="https://cdn-uicons.flaticon.com/2.6.0/uicons-thin-chubby/css/uicons-thin-chubby.css" />
-    <link rel="stylesheet" href="https://cdn-uicons.flaticon.com/2.6.0/uicons-thin-rounded/css/uicons-thin-rounded.css" />
-    <link rel="stylesheet" href="https://cdn-uicons.flaticon.com/2.6.0/uicons-regular-rounded/css/uicons-regular-rounded.css" />
-    <link rel="stylesheet" href="https://cdn-uicons.flaticon.com/2.6.0/uicons-solid-rounded/css/uicons-solid-rounded.css" />
-    <link rel="stylesheet" href="https://cdn-uicons.flaticon.com/2.6.0/uicons-bold-rounded/css/uicons-bold-rounded.css" />
-    <link rel="stylesheet" href="https://cdn-uicons.flaticon.com/2.6.0/uicons-regular-chubby/css/uicons-regular-chubby.css" />
-    <link rel="stylesheet" href="https://cdn-uicons.flaticon.com/2.6.0/uicons-thin-straight/css/uicons-thin-straight.css" />
-    <link rel="stylesheet" href="https://cdn-uicons.flaticon.com/2.6.0/uicons-regular-straight/css/uicons-regular-straight.css" />
   </head>
-  <body class="bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen font-sans antialiased transition-colors duration-200">
+  <body class="bg-[#FFFFFF] dark:bg-[#0B0B0C] text-[#111111] dark:text-[#F3F3F4] min-h-screen font-['Inter',sans-serif] antialiased transition-colors duration-200 selection:bg-neutral-200 dark:selection:bg-white/20 selection:text-black dark:selection:text-white">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
